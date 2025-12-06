@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: WebChat
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/WebChat
+    username: postgres
+    password: dimitris
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
