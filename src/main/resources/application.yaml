@@ -15,3 +15,21 @@ spring:
       hibernate:
         format_sql: true
 
+management:
+  endpoints:
+    web:
+      exposure:
+        # Exposes the most important endpoints for a professional setup
+        include: "health,info,metrics,prometheus"
+  endpoint:
+    health:
+      # Shows details like "db: UP", "diskSpace: UP" instead of just "status: UP"
+      show-details: always
+  metrics:
+    tags:
+      # This adds the application name to every metric (crucial for microservices)
+      application: ${spring.application.name}
+  prometheus:
+    metrics:
+      export:
+        enabled: true

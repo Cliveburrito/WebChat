@@ -22,7 +22,7 @@ public class UserController {
     private final UserRepository userRepository;
 
 
-    @GetMapping("/getall")
+    @GetMapping("/getall") // Πρόσθεσε αυτό εδώ
     public List<UserResponse> getAll() {
         return userRepository.findAll().stream()
                 .map(u -> new UserResponse(u.getId(), u.getUsername(), u.getEmail(), u.getAvatarUrl()))

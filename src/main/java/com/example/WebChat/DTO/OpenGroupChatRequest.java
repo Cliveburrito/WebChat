@@ -4,8 +4,6 @@ import java.util.List;
 
 
 public record OpenGroupChatRequest(
-        List<Long> userIDs,
-        String name
-){
-
-}
+        List<Long> memberIds,
+        String groupName
+){}

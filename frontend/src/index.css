@@ -1,0 +1,159 @@
+:root {
+  /* LIGHT THEME (Προεπιλογή) */
+  --bg-main: #f0f2f5;
+  --bg-sidebar: #ffffff;
+  --bg-header: #ffffff;
+  --bg-chat: #e5ddd5;
+  --text-main: #111b21;
+  --text-secondary: #65676b;
+  --border-color: #ddd;
+  --primary-blue: #0084ff;
+  --msg-me: #dcf8c6;
+  --msg-other: #ffffff;
+}
+
+/* DARK THEME - Ενεργοποιείται από το App.jsx */
+.app-container.dark-theme {
+  --bg-main: #0b141a;
+  --bg-sidebar: #111b21;
+  --bg-header: #202c33;
+  --bg-chat: #0b141a;
+  --text-main: #e9edef;
+  --text-secondary: #8696a0;
+  --border-color: #222d34;
+  --msg-me: #005c4b;
+  --msg-other: #202c33;
+}
+
+* { box-sizing: border-box; }
+body, #root {
+  height: 100vh;
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  overflow: hidden;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.header {
+  height: 60px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  justify-content: space-between;
+}
+.container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+/* SIDEBAR */
+.sidebar {
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.sidebar.left { width: 300px; border-right: 1px solid var(--border-color); }
+.sidebar.right { width: 200px; border-left: 1px solid var(--border-color); }
+
+.sidebar-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.sidebar-section { flex: 1; display: flex; flex-direction: column; min-height: 200px; border-bottom: 2px solid #f0f0f0; }
+.sidebar-list { flex: 1; overflow-y: auto; }
+.sidebar-title { padding: 10px 15px; font-size: 0.8rem; color: #888; background: #fafafa; margin: 0; text-transform: uppercase; }
+
+.item { padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f5f5f5; }
+.item:hover { background: #f9f9f9; }
+.item.active { background: #e7f3ff; border-left: 4px solid var(--primary-blue); }
+.item strong { display: block; font-size: 0.95rem; overflow-wrap: anywhere; }
+.item small { color: #65676b; font-size: 0.85rem; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* CHAT AREA */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-chat);
+}
+#messages {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.message-wrapper { display: flex; width: 100%; }
+.message-wrapper.me { justify-content: flex-end; }
+.message-wrapper.other { justify-content: flex-start; }
+
+.message-bubble {
+  max-width: 70%;
+  padding: 10px 15px;
+  border-radius: 15px;
+  color: var(--text-main);
+}
+.me .message-bubble { background: var(--msg-me); }
+.other .message-bubble { background: var(--msg-other); }
+
+/* ITEMS */
+.item {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-main);
+}
+.item.active {
+  background: var(--primary-blue);
+  color: white;
+}
+
+.message-sender { font-size: 0.75rem; font-weight: bold; color: #555; display: block; margin-bottom: 4px; }
+.message-time { font-size: 0.65rem; color: #888; text-align: right; margin-top: 4px; }
+
+
+/* INPUT */
+.input-area {
+  padding: 15px;
+  background: var(--bg-header);
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid var(--border-color);
+}
+.input-area input {
+  flex: 1;
+  padding: 12px;
+  border-radius: 20px;
+  background: var(--bg-main);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+}
+.input-area button { background: var(--primary-blue); color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+
+.load-more-btn { align-self: center; background: #fff; border: 1px solid #ccc; padding: 5px 15px; border-radius: 20px; cursor: pointer; margin: 10px 0; }
+
+.item.unread { background: #fff5f5; }
+.item.unread strong { font-weight: 800; }
+
+.unread-badge{
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #ff2d2d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}

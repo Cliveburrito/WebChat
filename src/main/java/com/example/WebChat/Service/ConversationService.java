@@ -1,153 +1,206 @@
 package com.example.WebChat.Service;
 
+import com.example.WebChat.DTO.ConversationResponse;
+import com.example.WebChat.DTO.OpenGroupChatRequest;
 import com.example.WebChat.Entity.ConvMembership;
 import com.example.WebChat.Entity.Conversation;
+import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Entity.User;
 import com.example.WebChat.Repository.ConversationRepository;
 import com.example.WebChat.Repository.ConvMembershipRepository;
+import com.example.WebChat.Repository.MessageRepository;
 import com.example.WebChat.Repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
-@Slf4j                                       // Enables log.info, log.error, etc.
-@Service                                     // Marks this class as a Spring service (business logic)
-@RequiredArgsConstructor                     // Generates constructor for all final fields (for DI)
+@Slf4j
+@Service
+@RequiredArgsConstructor
 public class ConversationService {
 
-    // These are injected by Spring via the generated constructor (because they are final).
     private final ConversationRepository conversationRepository;
     private final ConvMembershipRepository convMembershipRepository;
     private final UserRepository userRepository;
+    private final MessageRepository messageRepository;
 
     /**
-     * Creates a 1–1 (direct) conversation between exactly two distinct users.
-     * Business rules for direct chats:
-     *  - both users must be non-null
-     *  - users must be different (no chatting with yourself)
-     *  - exactly 2 participants
+     * Creates or retrieves a 1-1 direct conversation between two users.
+     * Checks if a direct chat already exists to prevent duplicates.
      */
-    public Conversation createDirectConversation(Long user1ID, Long user2ID) {
-        // 1. Fetch and Validate in one step
-        User user1 = userRepository.findById(user1ID)
-                .orElseThrow(() -> new IllegalArgumentException("User with ID " + user1ID + " not found"));
+    @Transactional
+    public Long createDirectConversation(Long user1ID, Long user2ID) {
+        if (user1ID.equals(user2ID)) {
+            throw new IllegalArgumentException("You cannot start a conversation with yourself.");
+        }
 
-        User user2 = userRepository.findById(user2ID)
-                .orElseThrow(() -> new IllegalArgumentException("User with ID " + user2ID + " not found"));
+        // Check for existing direct conversation
+        List<ConvMembership> memberships = convMembershipRepository.findAllByUser_Id(user1ID);
+        for (ConvMembership m : memberships) {
+            Conversation conv = m.getConversation();
+            if (!conv.isGroup()) {
+                boolean isOtherPresent = convMembershipRepository.existsByUser_IdAndConversation_ConversationID(user2ID, conv.getConversationID());
+                if (isOtherPresent) {
+                    log.info("Found existing direct conversation (ID: {})", conv.getConversationID());
+                    // return the Id at once
+                    return conv.getConversationID();
+                }
+            }
+        }
 
-        // Put the two users into a list to pass to the shared internal method
-        List<User> users = List.of(user1, user2);
+        User user1 = userRepository.findById(user1ID).
+                orElseThrow(() -> new RuntimeException("User 1 not found"));
+        User user2 = userRepository.findById(user2ID).
+                orElseThrow(() -> new RuntimeException("User 2 not found"));
 
-        // For direct chats we:
-        //  - set isGroup = false
-        //  - often don't need a name (can be null for now)
-        boolean isGroup = false;
-
-        // Delegate to the shared internal method that actually creates the Conversation + memberships
-        Conversation conversation = createConversationFunction(users, isGroup, user1.getUsername() + " " + user2.getUsername()
-                // Delegate to the shared internal method that actually creates the Conversation + memberships
-        );
-
-        log.info("Created direct conversation {} between users {} and {}",
-                conversation.getConversationName(), user1.getId(), user2.getId());
-
-        return conversation;
+        Conversation newConv = createConversationFunction(List.of(user1, user2), false, null);
+        log.info("Created a new direct conversation (ID: {})", newConv.getConversationID());
+        return newConv.getConversationID();
     }
 
     /**
-     * Creates a group conversation with the given users and name.
-     * Business rules for group chats (you can tweak these):
-     *  - at least 3 users (or 2 if you want)
-     *  - name must not be null or blank
-     *  - no duplicate users
+     *  Find the member user for this chat
+     *  and set his unreadMsg count to 0
      */
-    public Conversation createGroupConversation(List<Long> userIDs, String name) {
-        List<User> users = userRepository.findAllById(userIDs);
-        // Null/empty checks to ensure we have participants
-        if (users.isEmpty()) {
-            throw new IllegalArgumentException("Group conversation requires at least one user in the list.");
-        }
-
-        // Validate the name: a group should usually have a visible name
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("Group conversation must have a non-empty name.");
-        }
-
-        boolean isGroup = true;
-
-        // Delegate to the internal method that handles the actual creation logic
-        Conversation conversation = createConversationFunction(users, isGroup, name);
-
-        log.info("Created group conversation {} with name '{}' and {} members",
-                conversation.getConversationID(), name, users.size());
-
-        return conversation;
+    @Transactional
+    public void markAsRead(Long conversationId, String username) {
+        convMembershipRepository.findByUser_UsernameAndConversation_ConversationID(
+                username, conversationId).ifPresent(membership -> {
+                    if (membership.getUnreadCount() > 0) {
+                        membership.setUnreadCount(0);
+                        convMembershipRepository.save(membership);
+                        log.info("Marked conversation {} as read for user {}", conversationId, username);
+                    }
+                });
     }
 
     /**
-     * Shared internal method that:
-     *  - creates a Conversation entity
-     *  - saves it to the database
-     *  - creates ConvMembership rows for each user
-     * <p>
-     * This method is private because we want the public API to clearly express
-     * whether we are creating a direct or group conversation.
+     * Creates a group conversation with a list of users.
      */
+    @Transactional
+    public Conversation createGroupChat(OpenGroupChatRequest request, String creatorUsername) {
+        // Create the Conversation entity
+        Conversation conv = new Conversation();
+        conv.setConversationName(request.groupName());
+        conv.setGroup(true);
+        conv.setCreatedAt(Instant.now());
+        conv = conversationRepository.save(conv);
 
-    private Conversation createConversationFunction(List<User> users, boolean isGroup, String name) {
-        // Safety check: we assume the caller (public methods) already validated,
-        // but we can still protect against totally invalid input here.
-        if (users == null || users.size() < 2) {
-            throw new IllegalArgumentException("Conversation must have at least two user.");
+        // Get all member users + the creator
+        List<Long> allIds = new ArrayList<>(request.memberIds());
+        User creator = userRepository.findByUsername(creatorUsername).orElseThrow();
+        if (!allIds.contains(creator.getId())) {
+            allIds.add(creator.getId());
         }
 
-        // Use the current time once so that createdAt and joinedAt can share the same base moment if desired
-        Instant now = Instant.now();
+        // Create memberships for everyone
+        for (Long userId : allIds) {
+            User user = userRepository.findById(userId).orElseThrow();
+            ConvMembership membership = new ConvMembership();
+            membership.setUser(user);
+            membership.setConversation(conv);
+            membership.setJoinedAt(Instant.now());
+            membership.setUnreadCount(0);
+            convMembershipRepository.save(membership);
+        }
+        return conv;
+    }
 
-        // 1. Build the Conversation entity using Lombok's builder.
-        Conversation conversation = Conversation.builder()
-                .createdAt(now)         // when the conversation was created
-                .conversationName(name) // can be null for direct, non-null for group
-                .isGroup(isGroup)       // true for groups, false for direct chats
-                .build();
+    /**
+     * Retrieves all conversations for a specific user with formatted display names and last messages.
+     */
+    public List<ConversationResponse> getUserChats(String username) {
+        User currentUser = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // 2. Save the Conversation to the database.
-        //    After saving, 'conversation' will have its generated ID populated.
-        conversation = conversationRepository.save(conversation);
+        List<ConvMembership> memberships = convMembershipRepository.findAllByUser_Id(currentUser.getId());
+        List<ConversationResponse> responseList = new ArrayList<>();
 
-        // 3. For each user, create a ConvMembership row linking that user to this conversation.
-        List<ConvMembership> memberships = new ArrayList<>();
+        for (ConvMembership m : memberships) {
+            Conversation conv = m.getConversation();
 
-        for (User user : users) {
-            if (user == null) {
-                // If somehow a null user slipped through, we skip or throw an error.
-                // Here, we choose to fail fast.
-                throw new IllegalArgumentException("Null user in users list is not allowed.");
+            String displayName = conv.getConversationName();
+            if (!conv.isGroup()) {
+                displayName = convMembershipRepository.findAllByConversation_ConversationID(conv.getConversationID())
+                        .stream()
+                        .map(membership -> membership.getUser().getUsername())
+                        .filter(name -> !name.equals(username))
+                        .findFirst()
+                        .orElse("Direct Chat");
             }
 
-            // Create a new membership for this (user, conversation) pair.
-            ConvMembership membership = ConvMembership.builder()
-                    .conversation(conversation)  // link to the conversation we just created
-                    .user(user)                 // the user participating in the conversation
-                    .joinedAt(now)              // when the user joined (we reuse 'now' for consistency)
-                    .muted(false)               // default: not muted
-                    .notificationsOn(true)      // default: notifications are enabled
-                    .build();
+            Optional<Message> lastMsg = messageRepository.findLastMessage(conv.getConversationID());
 
-            memberships.add(membership);
+            String lastContent = lastMsg.map(Message::getMessage).orElse("No messages yet");
+            Instant sentAt = lastMsg.map(Message::getSentAt).orElse(null);
+
+            responseList.add(new ConversationResponse(
+                    conv.getConversationID(),
+                    displayName,
+                    "default-avatar.png",
+                    lastContent,
+                    m.getUnreadCount(),
+                    sentAt // might be null if no msgs
+            ));
         }
 
-        // 4. Save all memberships in one go (more efficient than saving one by one).
+        // Sorting to have the latest message first
+        responseList.sort((a, b) -> {
+            if (a.lastMessageAt() == null && b.lastMessageAt() == null) return 0;
+            if (a.lastMessageAt() == null) return 1;
+            if (b.lastMessageAt() == null) return -1;
+            return b.lastMessageAt().compareTo(a.lastMessageAt());
+        });
+
+        return responseList;
+    }
+
+    /**
+     * Fetches paginated messages with membership verification.
+     */
+    public Page<Message> getMessagesByConversationId(Long conversationId, String currentUsername, int page, int size) {
+        boolean isMember = convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(currentUsername, conversationId);
+        if (!isMember) {
+            throw new AccessDeniedException("You are not a member of this conversation.");
+        }
+
+        PageRequest pageable = PageRequest.of(page, size, Sort.by("sentAt").descending());
+        return messageRepository.findByConversation_ConversationID(conversationId, pageable);
+    }
+
+    /**
+     * Internal helper to persist a new Conversation and its Memberships.
+     */
+    private Conversation createConversationFunction(List<User> users, boolean isGroup, String name) {
+        Instant now = Instant.now();
+        Conversation conversation = Conversation.builder()
+                .createdAt(now)
+                .conversationName(name)
+                .isGroup(isGroup)
+                .build();
+
+        conversation = conversationRepository.save(conversation);
+
+        List<ConvMembership> memberships = new ArrayList<>();
+        for (User user : users) {
+            memberships.add(ConvMembership.builder()
+                    .conversation(conversation)
+                    .user(user)
+                    .joinedAt(now)
+                    .muted(false)
+                    .notificationsOn(true)
+                    .build());
+        }
         convMembershipRepository.saveAll(memberships);
 
-        // 5. Return the fully created conversation.
-        //    At this point, the DB has:
-        //      - 1 row in 'conversations'
-        //      - N rows in 'conversation_membership'
         return conversation;
     }
 }

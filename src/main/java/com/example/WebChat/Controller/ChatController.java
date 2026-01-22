@@ -1,77 +1,69 @@
 package com.example.WebChat.Controller;
 
 import com.example.WebChat.DTO.ChatMessageResponse;
-import com.example.WebChat.Repository.MessageRepository;
 import com.example.WebChat.Service.MessageService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
-
 
 import java.security.Principal;
 import java.util.List;
-import java.util.Map;
 
-@Controller
+@Slf4j
+@RestController
 @RequiredArgsConstructor
-@RequestMapping("/api")
+@RequestMapping("/api/messages") // base path for REST endpoints
 public class ChatController {
 
     private final MessageService messageService;
-    private final MessageRepository messageRepository;
 
-    // *** FRONTEND sends message to /app/chat/{id} ***
+    /**
+     * WebSocket Endpoint: Handles messages sent to /app/chat/{conversationId}
+     * The @MessageMapping prefix (/app) is defined in WebSocketConfig.
+     */
     @MessageMapping("/chat/{conversationId}")
-    public void sendMessage(
+    public void handleWebSocketMessage(
             Principal principal,
             @DestinationVariable Long conversationId,
             @Payload String content
     ) {
-        String username;
-        if (principal != null) {
-            username = principal.getName();
-        } else {
-            username = "anonymous"; // fallback για τώρα
-        }
+        // Fallback for security, principal should not be null if configured correctly
+        String username = (principal != null) ? principal.getName() : "anonymous";
 
-        System.out.println("WS message: convo=" + conversationId +
-                ", from=" + username + ", content=" + content);
+        log.info("Received WebSocket message for conversation {}: from user {}", conversationId, username);
 
+        // This saves the message and broadcasts it back to /topic/chat/{conversationId}
         messageService.processAndSend(username, conversationId, content);
     }
 
     @PostMapping("/chat/{id}/smsg")
     public ResponseEntity<ChatMessageResponse> sendMessage(
+            Principal principal,
             @PathVariable Long id,
-            @RequestBody ChatMessageResponse response
+            @RequestBody ChatMessageResponse body
     ) {
-
-        messageService.postMessage(response.senderUsername(),
-                response.conversationId(),
-                response.content());
-        return ResponseEntity.ok(response);
+        ChatMessageResponse saved = messageService.processAndSend(principal.getName(), id, body.content());
+        return ResponseEntity.ok(saved);
     }
 
-    @GetMapping("/chats/{id}/messages")
-    public ResponseEntity<?> getHistory(@PathVariable Long id) {
-        System.out.println(">>> Controller reached for ID: " + id); // Debug print
 
-        try {
-            List<ChatMessageResponse> history = messageService.getChatHistory(id);
-            return ResponseEntity.ok(history);
+    /**
+     * rest endpoint that retrieves message history for a specific conversation.
+     *
+     */
+    @GetMapping("/history/{conversationId}")
+    public ResponseEntity<List<ChatMessageResponse>> getChatHistory(
+            Principal principal,
+            @PathVariable Long conversationId
+    ) {
+        String username = principal.getName();
+        log.info("User {} requesting history for conversation {}", username, conversationId);
 
-        } catch (RuntimeException e) {
-            // This ensures you see the EXACT error message in Postman
-            System.err.println(">>> ERROR: " + e.getMessage());
-            return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", e.getMessage()));
-        }
+        List<ChatMessageResponse> history = messageService.getChatHistory(conversationId, username);
+        return ResponseEntity.ok(history);
     }
 }

@@ -49,4 +49,8 @@ public class ConvMembership {
     // Optional features
     private boolean muted;
     private boolean notificationsOn;
+
+    // to show the number of unread messages :)
+    @Column(nullable = false)
+    private int unreadCount = 0;
 }

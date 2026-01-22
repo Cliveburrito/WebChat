@@ -20,99 +20,142 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 /**
- * The WebSocketConfig.java file is a configuration class for setting up WebSocket messaging
- * and implements the WebSocketMessageBrokerConfigurer interface,
- * which provides methods to configure the message broker and register STOMP
- * (Simple Text Oriented Messaging Protocol) endpoints.
+ * WebSocket configuration class for setting up STOMP over WebSocket.
+ *
+ * <p>This class:
+ * <ul>
+ *   <li>Configures a simple in-memory message broker.</li>
+ *   <li>Registers STOMP endpoints that clients can connect to.</li>
+ *   <li>Adds a channel interceptor to authenticate WebSocket connections
+ *       using a JWT sent in the {@code Authorization} header.</li>
+ * </ul>
+ * </p>
  */
-
 @Configuration
 @EnableWebSocketMessageBroker
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    /** Service responsible for JWT generation, parsing and validation. */
     private final JwtService jwtService;
+
+    /** Custom implementation of {@link org.springframework.security.core.userdetails.UserDetailsService} used to load user data. */
     private final CustomUserDetailsService userDetailsService;
 
-
-    /**The configureMessageBroker method configures the message broker,
-     * which is responsible for routing messages from one client to another.
-     *<p> </p>
-     *config.enableSimpleBroker("/topic") enables a simple in-memory message broker
-     *with a destination prefix /topic. This is where the server will send messages to clients.
-     *<p> </p>
-     *config.setApplicationDestinationPrefixes("/app") Sets the application destination prefix
-     *to /app. This prefix is used to filter destinations targeted to
-     *application-specific message-handling methods.
+    /**
+     * Configures the message broker, which is responsible for routing messages
+     * between clients and the server.
+     *
+     * <ul>
+     *   <li>{@code enableSimpleBroker("/topic")} registers a simple in-memory broker
+     *       that clients can subscribe to under the {@code /topic} destination.</li>
+     *   <li>{@code setApplicationDestinationPrefixes("/app")} defines the prefix for
+     *       messages that are bound for @MessageMapping methods on the server side.</li>
+     * </ul>
+     *
+     * @param config the {@link MessageBrokerRegistry} used to configure message routing
      */
+    @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
+        // Clients subscribe to destinations like /topic/room1
         config.enableSimpleBroker("/topic");
+
+        // Clients send messages to /app/... which are handled by @MessageMapping methods
         config.setApplicationDestinationPrefixes("/app");
     }
 
     /**
-     * The registerStompEndpoints method registers the STOMP endpoints,
-     * which clients will use to connect to the WebSocket server.
+     * Registers STOMP endpoints that clients use to establish WebSocket connections.
+     *
      * <p>
-     * registry.addEndpoint("/ws").withSockJS() registers an endpoint at /ws and enables
-     * SockJS fallback options. SockJS is a library that provides WebSocket-like communication
-     * for browsers that don't support WebSocket.
-     * @param registry ss
+     * The endpoint {@code /ws} is exposed, and SockJS fallback is enabled so that
+     * clients without native WebSocket support can still connect.
+     * </p>
+     *
+     * @param registry the registry to which STOMP endpoints are added
      */
+    @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        System.out.println("✅ [DEBUG] registerStompEndpoints CALLED!"); // ← ΠΡΟΣΘΕΣΕ
-        registry.addEndpoint("/ws").withSockJS();
+        // Debug: verify that endpoint registration runs during startup
+        System.out.println("registerStompEndpoints CALLED!");
+
+        // WebSocket endpoint: ws://<host>/ws (with SockJS fallback)
+        registry.addEndpoint("/ws").
+                setAllowedOrigins("http://localhost:5173").
+                withSockJS();
     }
 
-
-
+    /**
+     * Configures the channel used for inbound messages from clients.
+     *
+     * <p>
+     * Here we register a {@link ChannelInterceptor} to:
+     * <ul>
+     *   <li>Intercept STOMP {@code CONNECT} frames.</li>
+     *   <li>Extract and validate the JWT from the {@code Authorization} header.</li>
+     *   <li>Set the authenticated {@link Authentication} principal on the WebSocket session.</li>
+     * </ul>
+     * </p>
+     *
+     * @param registration the registration object used to add interceptors
+     */
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        System.out.println("✅ [DEBUG] configureClientInboundChannel CALLED!"); // ← ΠΡΟΣΘΕΣΕ ΑΥΤΟ
+        System.out.println("configureClientInboundChannel CALLED!");
+
         registration.interceptors(new ChannelInterceptor() {
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
+                // Access STOMP headers from the incoming message
                 StompHeaderAccessor accessor =
                         MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
-                if (StompCommand.CONNECT.equals(accessor.getCommand())) {
+                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
+                    // Extract "Authorization" header from the WebSocket CONNECT frame
                     String authHeader = accessor.getFirstNativeHeader("Authorization");
                     System.out.println("WS CONNECT Authorization header = " + authHeader);
 
+                    // Expect header in form: "Authorization: Bearer <token>"
                     if (authHeader != null && authHeader.startsWith("Bearer ")) {
                         String token = authHeader.substring(7);
                         try {
+                            // Extract username from JWT
                             String username = jwtService.extractUsername(token);
-                            System.out.println("✅ WS CONNECT username from token = " + username);
+                            System.out.println("WS CONNECT username from token = " + username);
 
                             if (username != null) {
+                                // Load user details from your UserDetailsService
                                 UserDetails userDetails =
                                         userDetailsService.loadUserByUsername(username);
 
+                                // Validate JWT against loaded user details
                                 if (jwtService.isTokenValid(token, userDetails)) {
+                                    // Create an Authentication object for the WebSocket session
                                     Authentication auth =
                                             new UsernamePasswordAuthenticationToken(
                                                     userDetails,
                                                     null,
                                                     userDetails.getAuthorities()
                                             );
-                                    accessor.setUser(auth);
-                                    // ✅ ΚΡΙΣΙΜΟ: Όχι μόνο accessor.setUser, αλλά και simpUser header
 
-                                    System.out.println("✅ WS Principal set to " + username);
+                                    // Attach authentication principal to the WebSocket session
+                                    accessor.setUser(auth);
+
+                                    System.out.println("WS Principal set to " + username);
                                 } else {
-                                    System.out.println("✅ WS token NOT valid");
+                                    System.out.println("WS token NOT valid");
                                 }
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
-                            System.out.println("✅ WS JWT error: " + e.getMessage());
+                            System.out.println("WS JWT error: " + e.getMessage());
                         }
                     } else {
                         System.out.println("WS CONNECT: no Authorization header");
                     }
                 }
 
+                // Return the (possibly modified) message so it can continue in the pipeline
                 return message;
             }
         });

@@ -1,0 +1,149 @@
+:root {
+  --primary-blue: #0084ff;
+  --whatsapp-green: #dcf8c6;
+  --bg-main: #f0f2f5;
+  --bg-chat: #e5ddd5;
+  --white: #ffffff;
+  --border: #ddd;
+}
+
+/* Reset για να πιάνει όλη την οθόνη */
+* { box-sizing: border-box; }
+
+body, #root {
+  height: 100vh;
+  margin: 0;
+  padding: 0; /* Αφαιρούμε το padding: 2rem που είχε το παλιό CSS */
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+  text-align: left; /* Αλλάζουμε το text-align: center */
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.header {
+  height: 60px;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  justify-content: space-between;
+  z-index: 10;
+}
+
+/* Το main container των 3 στηλών */
+.container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: calc(100vh - 60px);
+}
+
+/* Κοινά στυλ Sidebar (Αριστερό & Δεξί) */
+.sidebar {
+  background: var(--white);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar.left {
+  width: 350px;
+  border-right: 1px solid var(--border);
+}
+
+.sidebar.right {
+  width: 180px !important;
+  border-left: 1px solid var(--border);
+  background: #fafafa;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-title {
+  padding: 10px 15px;
+  font-size: 0.8rem;
+  color: #888;
+  background: #fafafa;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+/* CHAT AREA (Μεσαία στήλη) */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-chat);
+  min-width: 400px;
+}
+
+#messages {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Στυλ για τα Items στις λίστες */
+.item {
+  padding: 12px 15px;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f5f5;
+  transition: background 0.2s;
+}
+
+.item:hover { background: #f9f9f9; }
+.item.active {
+  background: #e7f3ff;
+  border-left: 4px solid var(--primary-blue);
+}
+
+.item strong { display: block; font-size: 0.95rem; }
+.item small { color: #65676b; font-size: 0.85rem; }
+
+/* Unread Badge */
+.unread-badge {
+  background: #ff2d2d;
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: bold;
+}
+
+/* Input Area */
+.input-area {
+  padding: 15px;
+  background: var(--white);
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.input-area input {
+  flex: 1;
+  padding: 12px 20px;
+  border-radius: 25px;
+  border: 1px solid #ccc;
+  outline: none;
+}
+
+.input-area button {
+  background: var(--primary-blue);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: bold;
+}

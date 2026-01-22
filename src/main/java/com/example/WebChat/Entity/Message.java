@@ -1,8 +1,8 @@
-package com.example.WebChat.Entity; // Package where this class lives
+package com.example.WebChat.Entity;
 
-import jakarta.persistence.*;      // JPA annotations (Entity, Id, ManyToOne, etc.)
-import lombok.*;                   // Lombok annotations to avoid boilerplate
-import java.time.Instant;          // For storing timestamp info
+import jakarta.persistence.*;
+import lombok.*;
+import java.time.Instant;
 
 /**
  * This class represents a single chat message in the system.
@@ -10,12 +10,12 @@ import java.time.Instant;          // For storing timestamp info
  *  - belongs to exactly ONE conversation
  *  - is sent by exactly ONE user
  */
-@Entity                              // Marks this class as a JPA entity (mapped to a table)
-@Table(name = "messages")            // Explicit table name in the database (plural is common)
-@Data                                // Lombok: generates getters, setters, equals, hashCode, toString
-@Builder                             // Lombok: enables builder pattern for Message
-@NoArgsConstructor                   // Lombok: generates a no-args constructor (required by JPA)
-@AllArgsConstructor                  // Lombok: generates a constructor with all fields
+@Entity
+@Table(name = "messages")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Message {
 
     @Id                              // Marks this field as the primary key

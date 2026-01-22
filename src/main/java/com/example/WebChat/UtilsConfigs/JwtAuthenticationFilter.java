@@ -18,32 +18,58 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * 🔐 JWT Authentication Filter — runs on *every* incoming HTTP request (except /login, /register, etc. if excluded).
+ * JWT Authentication filter that runs once per HTTP request.
  *
- * 🎯 Goal: If a valid JWT is present in the "Authorization: Bearer <token>" header,
- *         authenticate the user and attach their identity to the request.
+ * <p>Responsibilities:</p>
+ * <ul>
+ *     <li>Inspect the {@code Authorization} header for a {@code Bearer &lt;token&gt;} value.</li>
+ *     <li>Extract and validate the JWT using {@link JwtService}.</li>
+ *     <li>Load the corresponding user via {@link CustomUserDetailsService}.</li>
+ *     <li>Populate the Spring Security {@link SecurityContextHolder} with an authenticated
+ *         {@link UsernamePasswordAuthenticationToken} if the token is valid.</li>
+ * </ul>
  *
- * ⚙️ Where it fits:
- *   Browser → [Spring Filter Chain] → JwtAuthenticationFilter → [Other Filters] → Controller
+ * <p>
+ * This filter does not handle errors explicitly (e.g. expired/invalid token) –
+ * in such cases the request simply proceeds as unauthenticated and will be
+ * rejected later by the security configuration or controller annotations.
+ * </p>
  *
- * 📝 Note: Extends {@link OncePerRequestFilter} (not raw Servlet Filter) to avoid double-invocation in async/error scenarios.
+ * <p>
+ * Extends {@link OncePerRequestFilter} instead of a raw {@code Filter} to ensure
+ * it runs only once per request, even in async/error dispatch scenarios.
+ * </p>
  */
 @Component
-@RequiredArgsConstructor // ← Injects jwtService & userDetailsService via constructor (clean, testable)
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    /** Service used to parse, extract information from, and validate JWT tokens. */
     private final JwtService jwtService;
+
+    /** Custom user details service used to load user information by username. */
     private final CustomUserDetailsService userDetailsService;
 
     /**
-     * 🧵 Core method: Processes each HTTP request *before* it reaches your controller.
+     * Core filter logic, invoked once per request.
      *
-     * ⚠️ Critical: Must call {@code filterChain.doFilter(request, response)} at the end —
-     *              otherwise the request STOPS here (504/timeout!).
+     * <p>Flow:</p>
+     * <ol>
+     *     <li>Read the {@code Authorization} header.</li>
+     *     <li>If it starts with {@code Bearer }, extract the token substring.</li>
+     *     <li>Use {@link JwtService} to extract a username from the token.</li>
+     *     <li>If no authentication is already present in the context, load the user
+     *         and validate the token against that user.</li>
+     *     <li>On success, set an authenticated {@link UsernamePasswordAuthenticationToken}
+     *         in the {@link SecurityContextHolder}.</li>
+     *     <li>Always delegate to the rest of the filter chain at the end.</li>
+     * </ol>
      *
-     * @param request  the incoming HTTP request
-     * @param response the HTTP response (can be modified, e.g., 401)
-     * @param filterChain the rest of the Spring Security filter chain
+     * @param request      the incoming HTTP request
+     * @param response     the HTTP response
+     * @param filterChain  the remaining filters in the chain
+     * @throws ServletException in case of servlet-related errors
+     * @throws IOException      in case of I/O issues
      */
     @Override
     protected void doFilterInternal(
@@ -52,62 +78,60 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
-        // 🔍 Step 1: Extract the "Authorization" header (e.g., "Bearer abc.xyz.123")
-        System.out.println("✅✅✅✅✅FILTER USED");
-        final String authHeader = request.getHeader("Authorization");
-        String jwt = null;
-        String username = null;
+        // Debug marker: verify filter is being executed
+        System.out.println("JwtAuthenticationFilter invoked for URI: " + request.getRequestURI());
 
-        // 🚫 If no header, or not "Bearer ..." → skip JWT auth (e.g., public endpoints)
-        //    Let the request proceed — maybe it’s /login, or a public resource.
+        // Read Authorization header (expected format: "Bearer <jwt>")
+        final String authHeader = request.getHeader("Authorization");
+        String jwt;
+        String username;
+
+        // If no Authorization header or does not start with "Bearer ", skip JWT processing.
+        // The request continues unauthenticated (may still access public endpoints)
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response); // ✅ Pass control to next filter
+            filterChain.doFilter(request, response);
             return;
         }
 
-        // ✂️ Step 2: Extract raw JWT (remove "Bearer " prefix → 7 chars)
-        jwt = authHeader.substring(7);  // "Bearer abc" → "abc"
+        // Extract raw JWT value from header (strip "Bearer " prefix)
+        jwt = authHeader.substring(7);
 
-        // 🔐 Step 3: Try to extract username from JWT (validates signature & structure!)
-        //    ⚠️ This may throw JwtException (e.g., invalid signature, malformed) → currently unhandled!
-        //    (Later: add try-catch + 401 response — see notes below)
+        // Extract username from token (implementation usually also checks signature & expiration)
         username = jwtService.extractUsername(jwt);
 
-        // ✅ Step 4: Only proceed if:
-        //    - We got a username from the token, AND
-        //    - No authentication already exists (avoid overriding existing auth, e.g., from session)
+        // Proceed only if:
+        //  - a username was successfully extracted, AND
+        //  - no authentication has yet been set in the security context
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-            // 🗃️ Step 5: Load full user details from DB (needed for roles, password hash check)
+            // Load user details from database or other backend source.
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-            // 🔑 Step 6: Validate the token against the user (checks: signature, expiration, username match)
+            // Validate the JWT against the loaded user, meaning username match, expiration, signature
             if (jwtService.isTokenValid(jwt, userDetails)) {
 
-                // 🪪 Step 7: Create an *authenticated* token (Spring Security’s way of saying "user is logged in")
+                // Step 6: Create an authenticated token for the current user.
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(
-                                userDetails,     // Principal (the user)
-                                null,            // Credentials → null (we don’t store password in context!)
-                                userDetails.getAuthorities() // Roles/permissions
+                                userDetails,                 // principal
+                                null,                        // credentials (not stored)
+                                userDetails.getAuthorities() // roles/authorities
                         );
 
-                // 📍 Step 8: Attach request metadata (IP, session, etc.) — useful for audit/security logs
+                // Attach additional request details, IP, session ID, etc.
                 authToken.setDetails(
                         new WebAuthenticationDetailsSource().buildDetails(request)
                 );
 
-                // 🧠 Step 9: ✅ THE MOST IMPORTANT LINE:
-                //    Store the authentication in Spring’s *thread-local* security context.
-                //    → Now, ANYWHERE in this request (controllers, services), you can call:
-                //         SecurityContextHolder.getContext().getAuthentication().getName()
-                //    → Also enables @PreAuthorize, hasRole(), etc.
+                // Store the Authentication object in the security context
+                // From this point on, controllers and other components can retrieve:
+                // SecurityContextHolder.getContext().getAuthentication()
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
-            // ❗ If token is invalid → do *nothing*. Request proceeds unauthenticated (will be blocked later by @PreAuthorize or 403).
+            // If token is invalid, we do nothing , the request proceeds without authentication
         }
 
-        // 🔄 Step 10: ALWAYS pass the request down the chain — even if auth failed!
+        // Continue with the rest of the filter chain, regardless of auth outcome.
         filterChain.doFilter(request, response);
     }
 }

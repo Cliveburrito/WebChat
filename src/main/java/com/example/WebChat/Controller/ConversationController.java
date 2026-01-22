@@ -1,41 +1,90 @@
 package com.example.WebChat.Controller;
 
+import com.example.WebChat.DTO.ChatMessageResponse;
+import com.example.WebChat.DTO.ConversationResponse;
 import com.example.WebChat.DTO.OpenDirectChatRequest;
 import com.example.WebChat.DTO.OpenGroupChatRequest;
 import com.example.WebChat.Entity.Conversation;
-import com.example.WebChat.Repository.ConversationRepository;
+import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Service.ConversationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import java.security.Principal;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/chats") // Base URL
-@RequiredArgsConstructor      // Injects all 'final' fields automatically
+@RequestMapping("/api/chats")
+@RequiredArgsConstructor
 public class ConversationController {
 
-    // 1. Remove @Autowired and make final
     private final ConversationService conversationService;
-    private final ConversationRepository conversationRepository;
 
-    // (You don't need repositories here, the Service handles them!)
-
-    // URL becomes: POST /api/chats/group
-    @PostMapping("/group")
-    public Conversation openGroupChat(@RequestBody OpenGroupChatRequest request) {
-        // Ensure your DTO accessor is correct (request.userIds() vs request.userIDs())
-        return conversationService.createGroupConversation(request.userIDs(), request.name());
-    }
-
-    // URL becomes: POST /api/chats/direct
+    /**
+     * Creates or retrieves a direct conversation between two users.
+     */
     @PostMapping("/direct")
-    public Conversation openConversation(@RequestBody OpenDirectChatRequest request) {
-        return conversationService.createDirectConversation(request.id1(), request.id2());
+    public ResponseEntity<?> openConversation(@RequestBody OpenDirectChatRequest request) {
+        Long conversationId = conversationService.createDirectConversation(request.id1(), request.id2());
+
+        // We use a map for a lightweight response , so that we dont have to create a new DTO
+        return ResponseEntity.ok(java.util.Map.of("conversationID", conversationId));
     }
 
-    @GetMapping("/getall")
-    public List<Conversation> getAllConversations() {
-        return conversationRepository.findAll();
+    /**
+     * Creates a new group conversation.
+     */
+    @PostMapping("/group")
+    public ResponseEntity<?> createGroup(@RequestBody OpenGroupChatRequest request, Principal principal) {
+        // We pass the creator's username and the request
+        Conversation conv = conversationService.createGroupChat(request, principal.getName());
+        return ResponseEntity.ok(conv);
+    }
+
+    /**
+     * Retrieves all conversations for the currently authenticated user.
+     */
+    @GetMapping("/my")
+    public ResponseEntity<List<ConversationResponse>> getMyChats(Principal principal) {
+        return ResponseEntity.ok(conversationService.getUserChats(principal.getName()));
+    }
+
+    /**
+     * Fetches paginated messages for a specific conversation.
+     * Includes a membership security check using the Principal.
+     */
+    // ConversationController.java
+    @GetMapping("/{conversationId}/messages")
+    public ResponseEntity<Page<ChatMessageResponse>> getConversationMessages(
+            Principal principal,
+            @PathVariable Long conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        // We get the entities
+        Page<Message> messagesPage = conversationService.getMessagesByConversationId(
+                conversationId, principal.getName(), page, size
+        );
+
+        // And we transform them to ChatMessageResponse DTO
+        Page<ChatMessageResponse> dtoPage = messagesPage.map(m -> new ChatMessageResponse(
+                m.getMessage(),
+                m.getSentAt(),
+                m.getSender().getUsername(),
+                m.getConversation().getConversationID()
+        ));
+
+        return ResponseEntity.ok(dtoPage);
+    }
+
+    /**
+     * The endpoint the frontend uses to let the backend know the user has clicked
+     * the chat and has read the messages!
+     */
+    @PostMapping("/{id}/read")
+    public ResponseEntity<?> markAsRead(@PathVariable Long id, Principal principal) {
+        conversationService.markAsRead(id, principal.getName());
+        return ResponseEntity.ok().build();
     }
 }
