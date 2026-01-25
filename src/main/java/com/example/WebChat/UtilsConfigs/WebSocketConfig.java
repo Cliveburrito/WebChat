@@ -5,6 +5,7 @@ import com.example.WebChat.Service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -31,15 +32,12 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  * </ul>
  * </p>
  */
+@Slf4j
 @Configuration
 @EnableWebSocketMessageBroker
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
-
-    /** Service responsible for JWT generation, parsing and validation. */
     private final JwtService jwtService;
-
-    /** Custom implementation of {@link org.springframework.security.core.userdetails.UserDetailsService} used to load user data. */
     private final CustomUserDetailsService userDetailsService;
 
     /**
@@ -53,7 +51,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      *       messages that are bound for @MessageMapping methods on the server side.</li>
      * </ul>
      *
-     * @param config the {@link MessageBrokerRegistry} used to configure message routing
      */
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
@@ -71,13 +68,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      * The endpoint {@code /ws} is exposed, and SockJS fallback is enabled so that
      * clients without native WebSocket support can still connect.
      * </p>
-     *
-     * @param registry the registry to which STOMP endpoints are added
+
      */
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // Debug: verify that endpoint registration runs during startup
-        System.out.println("registerStompEndpoints CALLED!");
+        log.info("registerStompEndpoints CALLED!");
 
         // WebSocket endpoint: ws://<host>/ws (with SockJS fallback)
         registry.addEndpoint("/ws").
@@ -96,8 +92,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      *   <li>Set the authenticated {@link Authentication} principal on the WebSocket session.</li>
      * </ul>
      * </p>
-     *
-     * @param registration the registration object used to add interceptors
+
      */
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
@@ -147,14 +142,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                                 }
                             }
                         } catch (Exception e) {
-                            e.printStackTrace();
-                            System.out.println("WS JWT error: " + e.getMessage());
+                            log.warn("WS JWT error: {}", e.getMessage());
                         }
                     } else {
                         System.out.println("WS CONNECT: no Authorization header");
                     }
                 }
-
                 // Return the (possibly modified) message so it can continue in the pipeline
                 return message;
             }

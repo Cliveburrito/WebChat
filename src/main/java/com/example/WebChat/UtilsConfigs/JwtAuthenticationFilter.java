@@ -7,6 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -40,14 +41,11 @@ import java.io.IOException;
  * it runs only once per request, even in async/error dispatch scenarios.
  * </p>
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-
-    /** Service used to parse, extract information from, and validate JWT tokens. */
     private final JwtService jwtService;
-
-    /** Custom user details service used to load user information by username. */
     private final CustomUserDetailsService userDetailsService;
 
     /**
@@ -64,12 +62,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      *         in the {@link SecurityContextHolder}.</li>
      *     <li>Always delegate to the rest of the filter chain at the end.</li>
      * </ol>
-     *
-     * @param request      the incoming HTTP request
-     * @param response     the HTTP response
-     * @param filterChain  the remaining filters in the chain
-     * @throws ServletException in case of servlet-related errors
-     * @throws IOException      in case of I/O issues
      */
     @Override
     protected void doFilterInternal(
@@ -79,14 +71,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         // Debug marker: verify filter is being executed
-        System.out.println("JwtAuthenticationFilter invoked for URI: " + request.getRequestURI());
+        log.info("JwtAuthenticationFilter invoked for URI: {}", request.getRequestURI());
 
         // Read Authorization header (expected format: "Bearer <jwt>")
         final String authHeader = request.getHeader("Authorization");
         String jwt;
         String username;
 
-        // If no Authorization header or does not start with "Bearer ", skip JWT processing.
+        // If no Authorization header or does not start with "Bearer ", skip JWT processing
         // The request continues unauthenticated (may still access public endpoints)
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
@@ -95,6 +87,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // Extract raw JWT value from header (strip "Bearer " prefix)
         jwt = authHeader.substring(7);
+        log.info("jwt = {}", jwt);
 
         // Extract username from token (implementation usually also checks signature & expiration)
         username = jwtService.extractUsername(jwt);
@@ -110,7 +103,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // Validate the JWT against the loaded user, meaning username match, expiration, signature
             if (jwtService.isTokenValid(jwt, userDetails)) {
 
-                // Step 6: Create an authenticated token for the current user.
+                // Create an authenticated token for the current user
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(
                                 userDetails,                 // principal

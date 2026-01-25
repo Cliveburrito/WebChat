@@ -2,6 +2,9 @@ package com.example.WebChat.Service;
 
 import com.example.WebChat.DTO.*;
 import com.example.WebChat.Entity.User;
+import com.example.WebChat.Exception.EmailAlreadyExistsException;
+import com.example.WebChat.Exception.RateLimitExceededException;
+import com.example.WebChat.Exception.UserAlreadyExistsException;
 import com.example.WebChat.Repository.UserRepository;
 import io.github.bucket4j.Bucket;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,13 +33,13 @@ public class UserService {
 
         if(!bucket.tryConsume(1)) {
             log.warn("Too many attempts from ip: {}", ipAddress);
-            throw new RuntimeException("Too many requests. Please try again in a bit.");
+            throw new RateLimitExceededException("Too many requests. Please try again in a bit.");
         }
         if (userRepository.existsByUsername(request.username())) {
-            throw new IllegalArgumentException("Username already in use");
+            throw new UserAlreadyExistsException("Username already in use");
         }
         if (userRepository.existsByEmail(request.email())) {
-            throw new IllegalArgumentException("Email already in use");
+            throw new EmailAlreadyExistsException("Email already in use");
         }
 
         User user = new User();
@@ -70,7 +73,7 @@ public class UserService {
 
         if (!bucket.tryConsume(1)) {
             log.warn("Too many attempts from ip: {}", ipAddress);
-            throw new RuntimeException("Too many requests. Please try again in a bit.");
+            throw new RateLimitExceededException("Too many requests. Please try again in a bit.");
         }
 
         // We let the authentication Manager check the password

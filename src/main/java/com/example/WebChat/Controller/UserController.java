@@ -4,6 +4,7 @@ import com.example.WebChat.DTO.LoginUserRequest;
 import com.example.WebChat.DTO.RegisterUserRequest;
 import com.example.WebChat.DTO.UserResponse;
 import com.example.WebChat.Entity.User;
+import com.example.WebChat.Exception.ResourceNotFoundException;
 import com.example.WebChat.Repository.UserRepository;
 import com.example.WebChat.Service.UserService;
 
@@ -22,7 +23,7 @@ public class UserController {
     private final UserRepository userRepository;
 
 
-    @GetMapping("/getall") // Πρόσθεσε αυτό εδώ
+    @GetMapping("/getall")
     public List<UserResponse> getAll() {
         return userRepository.findAll().stream()
                 .map(u -> new UserResponse(u.getId(), u.getUsername(), u.getEmail(), u.getAvatarUrl()))
@@ -31,8 +32,8 @@ public class UserController {
 
     @GetMapping("/getuser/{username}")
     public UserResponse getUser(@PathVariable String username) {
-        Optional<User> user =  userRepository.findByUsername(username);
-        User u = user.get();
+        User u = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
         return new UserResponse(u.getId(), u.getUsername(), u.getEmail(), u.getAvatarUrl());
     }
 }

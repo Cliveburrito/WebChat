@@ -8,7 +8,6 @@ import java.time.Instant;
  * This table represents the link between USER and CONVERSATION.
  * Each row means:
  *     "This user is a member of this conversation."
- *
  * Many-to-Many resolved as two Many-to-One links:
  *  - Many membership rows → one user
  *  - Many membership rows → one conversation

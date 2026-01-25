@@ -5,6 +5,8 @@ import com.example.WebChat.Entity.ConvMembership;
 import com.example.WebChat.Entity.Conversation;
 import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Entity.User;
+import com.example.WebChat.Exception.RateLimitExceededException;
+import com.example.WebChat.Exception.ResourceNotFoundException;
 import com.example.WebChat.Repository.ConvMembershipRepository;
 import com.example.WebChat.Repository.ConversationRepository;
 import com.example.WebChat.Repository.MessageRepository;
@@ -13,15 +15,12 @@ import io.github.bucket4j.Bucket;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.catalina.util.RateLimiter;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 
 
 @Slf4j
@@ -54,10 +53,10 @@ public class MessageService {
     @Transactional
     public ChatMessageResponse processAndSend(String username, Long conversationId, String content) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found: " + username));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
 
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found: " + conversationId));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found: " + conversationId));
 
         boolean isMember = convMembershipRepository.existsByUser_IdAndConversation_ConversationID(user.getId(), conversationId);
         if (!isMember) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a member of this conversation.");
@@ -65,7 +64,7 @@ public class MessageService {
         Bucket bucket = rateLimiter.resolveMessageBucket(username);
         if(!bucket.tryConsume(1)) {
             log.warn("User {} is spamming messages...",  username);
-            throw new RuntimeException("Too many messages!");
+            throw new RateLimitExceededException("Too many messages!");
         }
 
         Message msg = Message.builder()
@@ -83,8 +82,7 @@ public class MessageService {
                 user.getUsername(),
                 conversationId
         );
-
-        // στείλε στη συνομιλία
+        // the frontend doesn't subscribe to this topic, but we are keeping it
         messagingTemplate.convertAndSend("/topic/chat/" + conversationId, dto);
 
         // unread + notifications
@@ -101,26 +99,22 @@ public class MessageService {
         return dto;
     }
 
-
+    /**
+     * I used that for Postman , although it's useless now basically I'll keep it
+     */
     public void postMessage(String username, Long conversationId, String content) {
-        Optional<User> user = userRepository.findByUsername(username);
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User Does NOT FOUND" + username));
         Conversation conversation = conversationRepository.findByConversationID(conversationId);
 
         Message message = Message.builder()
                 .conversation(conversation)
-                .sender(user.get())
+                .sender(user)
                 .sentAt(Instant.now())
                 .message(content)
                 .build();
 
-        message = messageRepository.save(message);
-
-        ChatMessageResponse dto = new ChatMessageResponse(
-                message.getMessage(),
-                message.getSentAt(),
-                message.getSender().getUsername(),
-                message.getConversation().getConversationID());
-
+        messageRepository.save(message);
     }
 
     /**
@@ -128,7 +122,6 @@ public class MessageService {
      * Note: For security, you should also verify membership here if calling from a generic controller.
      */
     public List<ChatMessageResponse> getChatHistory(Long conversationId, String requestingUser) {
-        // Security Check
         boolean isMember = convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(
                 requestingUser, conversationId);
 

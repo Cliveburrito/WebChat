@@ -1,7 +1,6 @@
 package com.example.WebChat.Service;
 
-import io.github.bucket4j.Bucket; // Note the direct Bucket import
-import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.Bucket;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.time.Duration;
@@ -27,12 +26,10 @@ public class RateLimiterService {
     }
 
     public Bucket resolveMessageBucket(String username) {
-        return buckets.computeIfAbsent("MSG_" + username , k -> {
-            return Bucket.builder()
-                    .addLimit(limit -> limit
-                            .capacity(5)
-                            .refillGreedy(2, Duration.ofSeconds(1)))
-                    .build();
-        });
+        return buckets.computeIfAbsent("MSG_" + username , k -> Bucket.builder()
+                .addLimit(limit -> limit
+                        .capacity(5)
+                        .refillGreedy(5, Duration.ofSeconds(5)))
+                .build());
     }
 }

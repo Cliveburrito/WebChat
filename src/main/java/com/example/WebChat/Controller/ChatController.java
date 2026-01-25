@@ -24,6 +24,10 @@ public class ChatController {
     /**
      * WebSocket Endpoint: Handles messages sent to /app/chat/{conversationId}
      * The @MessageMapping prefix (/app) is defined in WebSocketConfig.
+     *
+     * FOR NOW, I AM NOT USING THIS IN THE FRONTEND I AM PLAYING WITH A HYBRID MODEL
+     * I USE REST FOR SENDING A MESSAGE AND A WEBSOCKET FOR RECEIVING THE MESSAGES, I LL STILL KEEP IT
+     * IN CASE I WANT TO SWAP TO PURE SOCKET INTERACTION.
      */
     @MessageMapping("/chat/{conversationId}")
     public void handleWebSocketMessage(
@@ -40,6 +44,9 @@ public class ChatController {
         messageService.processAndSend(username, conversationId, content);
     }
 
+
+    /**This is what my frontend currently uses to send a message, this endpoint not the socket
+     */
     @PostMapping("/chat/{id}/smsg")
     public ResponseEntity<ChatMessageResponse> sendMessage(
             Principal principal,
@@ -53,7 +60,6 @@ public class ChatController {
 
     /**
      * rest endpoint that retrieves message history for a specific conversation.
-     *
      */
     @GetMapping("/history/{conversationId}")
     public ResponseEntity<List<ChatMessageResponse>> getChatHistory(

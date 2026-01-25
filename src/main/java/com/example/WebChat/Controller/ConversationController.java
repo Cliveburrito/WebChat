@@ -5,7 +5,6 @@ import com.example.WebChat.DTO.ConversationResponse;
 import com.example.WebChat.DTO.OpenDirectChatRequest;
 import com.example.WebChat.DTO.OpenGroupChatRequest;
 import com.example.WebChat.Entity.Conversation;
-import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Service.ConversationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -28,7 +27,8 @@ public class ConversationController {
     public ResponseEntity<?> openConversation(@RequestBody OpenDirectChatRequest request) {
         Long conversationId = conversationService.createDirectConversation(request.id1(), request.id2());
 
-        // We use a map for a lightweight response , so that we dont have to create a new DTO
+        // We use a map for a lightweight response , so that we don't have to create a new DTO
+        // so the frontend gets the JSON like key value-pair and not a single number!
         return ResponseEntity.ok(java.util.Map.of("conversationID", conversationId));
     }
 
@@ -51,10 +51,9 @@ public class ConversationController {
     }
 
     /**
-     * Fetches paginated messages for a specific conversation.
-     * Includes a membership security check using the Principal.
+     * Fetches paginated messages for a specific conversation
+     * Includes a membership security check using the Principal
      */
-    // ConversationController.java
     @GetMapping("/{conversationId}/messages")
     public ResponseEntity<Page<ChatMessageResponse>> getConversationMessages(
             Principal principal,
@@ -62,20 +61,11 @@ public class ConversationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
-        // We get the entities
-        Page<Message> messagesPage = conversationService.getMessagesByConversationId(
+        Page<ChatMessageResponse> response = conversationService.getMessagesByConversationId(
                 conversationId, principal.getName(), page, size
         );
 
-        // And we transform them to ChatMessageResponse DTO
-        Page<ChatMessageResponse> dtoPage = messagesPage.map(m -> new ChatMessageResponse(
-                m.getMessage(),
-                m.getSentAt(),
-                m.getSender().getUsername(),
-                m.getConversation().getConversationID()
-        ));
-
-        return ResponseEntity.ok(dtoPage);
+        return ResponseEntity.ok(response);
     }
 
     /**

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import './Login.css'; // Χρησιμοποιούμε το ίδιο CSS αρχείο για ομοιομορφία
+import './Login.css';
 
 export default function Register({ onRegisterSuccess, onGoToLogin }) {
     const [username, setUsername] = useState('');
@@ -16,22 +16,28 @@ export default function Register({ onRegisterSuccess, onGoToLogin }) {
         try {
             const response = await fetch('/api/auth/register', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password })
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, email, password})
             });
 
             if (!response.ok) {
-                throw new Error('Η εγγραφή απέτυχε. Το όνομα χρήστη ή το email μπορεί να χρησιμοποιούνται ήδη.');
+
+                const errorData = await response.json();
+
+                throw new Error(errorData.message || 'Κάτι πήγε στραβά στην εγγραφή.');
             }
 
-            alert("Επιτυχής εγγραφή! Τώρα μπορείτε να συνδεθείτε.");
-            onRegisterSuccess();
+            const data = await response.json();
+            alert("Επιτυχής εγγραφή!");
+            onRegisterSuccess(data);
+
         } catch (err) {
+
             setError(err.message);
         } finally {
             setIsLoading(false);
         }
-    };
+    }
 
     return (
         <div className="login-page-wrapper">

@@ -87,13 +87,10 @@ export default function ChatArea({
 
             const saved = await response.json();
 
-            // είσαι εσύ, άρα auto-scroll κάτω
             shouldAutoScrollRef.current = true;
 
-            // θpdate chat messages
             setMessages((prev) => [...prev, saved]);
 
-            //  update sidebar (lastMessage) ΑΜΕΣΑ
             if (onMessageSent) onMessageSent(saved);
 
             setText("");

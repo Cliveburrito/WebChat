@@ -1,11 +1,13 @@
 package com.example.WebChat.Service;
 
+import com.example.WebChat.DTO.ChatMessageResponse;
 import com.example.WebChat.DTO.ConversationResponse;
 import com.example.WebChat.DTO.OpenGroupChatRequest;
 import com.example.WebChat.Entity.ConvMembership;
 import com.example.WebChat.Entity.Conversation;
 import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Entity.User;
+import com.example.WebChat.Exception.ResourceNotFoundException;
 import com.example.WebChat.Repository.ConversationRepository;
 import com.example.WebChat.Repository.ConvMembershipRepository;
 import com.example.WebChat.Repository.MessageRepository;
@@ -83,39 +85,25 @@ public class ConversationService {
     }
 
     /**
-     * Creates a group conversation with a list of users.
+     * Creates a group conversation with a list of users
      */
     @Transactional
     public Conversation createGroupChat(OpenGroupChatRequest request, String creatorUsername) {
-        // Create the Conversation entity
-        Conversation conv = new Conversation();
-        conv.setConversationName(request.groupName());
-        conv.setGroup(true);
-        conv.setCreatedAt(Instant.now());
-        conv = conversationRepository.save(conv);
+        User creator = userRepository.findByUsername(creatorUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Creator not found"));
 
-        // Get all member users + the creator
         List<Long> allIds = new ArrayList<>(request.memberIds());
-        User creator = userRepository.findByUsername(creatorUsername).orElseThrow();
         if (!allIds.contains(creator.getId())) {
             allIds.add(creator.getId());
         }
 
-        // Create memberships for everyone
-        for (Long userId : allIds) {
-            User user = userRepository.findById(userId).orElseThrow();
-            ConvMembership membership = new ConvMembership();
-            membership.setUser(user);
-            membership.setConversation(conv);
-            membership.setJoinedAt(Instant.now());
-            membership.setUnreadCount(0);
-            convMembershipRepository.save(membership);
-        }
-        return conv;
+        List<User> users = userRepository.findAllById(allIds);
+
+        return createConversationFunction(users, true, request.groupName());
     }
 
     /**
-     * Retrieves all conversations for a specific user with formatted display names and last messages.
+     * Retrieves all conversations for a specific user with formatted display names and last messages
      */
     public List<ConversationResponse> getUserChats(String username) {
         User currentUser = userRepository.findByUsername(username)
@@ -163,19 +151,24 @@ public class ConversationService {
         return responseList;
     }
 
-    /**
-     * Fetches paginated messages with membership verification.
-     */
-    public Page<Message> getMessagesByConversationId(Long conversationId, String currentUsername, int page, int size) {
+    public Page<ChatMessageResponse> getMessagesByConversationId(Long conversationId, String currentUsername, int page, int size) {
         boolean isMember = convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(currentUsername, conversationId);
+
         if (!isMember) {
             throw new AccessDeniedException("You are not a member of this conversation.");
         }
 
         PageRequest pageable = PageRequest.of(page, size, Sort.by("sentAt").descending());
-        return messageRepository.findByConversation_ConversationID(conversationId, pageable);
-    }
 
+        Page<Message> messagesPage = messageRepository.findByConversation_ConversationID(conversationId, pageable);
+
+        return messagesPage.map(m -> new ChatMessageResponse(
+                m.getMessage(),
+                m.getSentAt(),
+                m.getSender().getUsername(),
+                conversationId
+        ));
+    }
     /**
      * Internal helper to persist a new Conversation and its Memberships.
      */

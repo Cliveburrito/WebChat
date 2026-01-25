@@ -13,7 +13,6 @@ export async function apiJson(url, { token, method = "GET", body } = {}) {
         throw new Error(text || `${method} ${url} failed (${res.status})`);
     }
 
-    // μερικά endpoints μπορεί να επιστρέφουν empty
     const txt = await res.text();
     return txt ? JSON.parse(txt) : null;
 }

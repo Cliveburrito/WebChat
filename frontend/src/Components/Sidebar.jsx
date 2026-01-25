@@ -2,21 +2,20 @@ import { useState, useMemo } from "react";
 
 export default function Sidebar({
                                     conversations,
-                                    users, // Χρειάζονται για την επιλογή μελών στο Group
+                                    users,
                                     activeChat,
                                     onSelectChat,
                                     currentUser,
                                     token,
                                     onGroupCreated,
                                 }) {
-    // --- States για το Modal του Group Chat ---
     const [isOpen, setIsOpen] = useState(false);
     const [groupName, setGroupName] = useState("");
     const [selectedIds, setSelectedIds] = useState([]);
     const [error, setError] = useState("");
     const [isCreating, setIsCreating] = useState(false);
 
-    // Φιλτράρισμα χρηστών για το Modal (επαφές εκτός από εμένα)
+
     const contacts = useMemo(() => {
         return (users || []).filter(u => u.username !== currentUser);
     }, [users, currentUser]);
@@ -39,7 +38,6 @@ export default function Sidebar({
         resetModal();
     };
 
-    // --- Logic Δημιουργίας Group ---
     const handleCreateGroup = async () => {
         setError("");
         const name = groupName.trim();
@@ -110,7 +108,7 @@ export default function Sidebar({
                 </div>
             </div>
 
-            {/* --- MODAL ΓΙΑ GROUP CHAT --- */}
+            {}
             {isOpen && (
                 <div style={styles.backdrop} onClick={closeModal}>
                     <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -160,7 +158,6 @@ export default function Sidebar({
     );
 }
 
-// --- CSS-in-JS Styles ---
 const styles = {
     backdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 },
     modal: { width: 400, background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 10px 25px rgba(0,0,0,0.2)" },

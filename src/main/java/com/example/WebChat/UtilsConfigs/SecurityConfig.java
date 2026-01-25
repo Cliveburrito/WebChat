@@ -28,11 +28,6 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
-
-    /**
-     * Custom filter that intercepts every request, extracts a JWT token
-     * from the Authorization header, validates it, and sets authentication context.
-     */
     private final JwtAuthenticationFilter jwtAuthFilter;
 
     /**
@@ -45,10 +40,6 @@ public class SecurityConfig {
      *     <li>Public routes defined via {@code permitAll()}.</li>
      *     <li>A JWT filter is added before Spring's username/password filter.</li>
      * </ul>
-     *
-     * @param http HttpSecurity builder provided by Spring
-     * @return the built {@link SecurityFilterChain}
-     * @throws Exception if configuration fails
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -86,10 +77,6 @@ public class SecurityConfig {
      * Required for user login authentication in Spring Security,
      * especially when manually authenticating credentials in the AuthService.
      * </p>
-     *
-     * @param config AuthenticationConfiguration provided by Spring Boot
-     * @return AuthenticationManager instance
-     * @throws Exception in case of failure during initialization
      */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {

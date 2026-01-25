@@ -33,12 +33,12 @@ export default function Login({ onLoginSuccess, onGoToRegister }) {
 
     return (
         <div className="login-page-wrapper">
-            {/* Επίπεδο 1: Οι κινούμενες φούσκες στο υπόβαθρο */}
+            {}
             <ul className="bubbles">
                 <li></li><li></li><li></li><li></li><li></li>
             </ul>
 
-            {/* Επίπεδο 2: Η κάρτα εισόδου */}
+            {}
             <div className="login-card">
                 <h1>WebChat</h1>
                 <p>Συνδεθείτε για να ξεκινήσετε</p>
