@@ -1,23 +1,41 @@
 # WebChat — Real-Time Chat Platform with WebSockets & JWT Authentication
 
-WebChat is a full-stack real-time messaging application built with Spring Boot, WebSockets (STOMP/SockJS) and a lightweight HTML/JS frontend.
+WebChat is a full-stack real-time messaging application built with Spring Boot, WebSockets (STOMP/SockJS) and React.
 The goal of the project is to simulate a modern chat environment similar to Messenger/WhatsApp — supporting authentication, live messaging, conversations, persistence, and extensible architecture for future features.
 
 ## Features
 
-JWT Authentication (Register/Login)	 <br />
+JWT Authentication: Stateless security with JSON Web Tokens.	 <br />
 Real-time messaging using WebSocket STOMP	 <br />
+Intelligent Rate Limiting: Powered by Bucket4j to prevent brute-force logins and message spamming.  <br />
 Message saving & conversation persistence	<br />
+Pagination of chat history <br />
 Direct & Group conversations<br />
-Simple Web UI (HTML + JavaScript + SockJS)<br />	
-DTO-driven backend response mapping<br />
+Live Notifications: Real-time unread count updates and push notifications for users. <br />
+Simple Web UI (React + SockJS)<br />	
+Global Error Handling: Custom exceptions for a smooth frontend experience:<br />
+
+## Tech Stack
+### Backend
+Java 21 with Spring Boot 3.4.0 <br />
+Spring Security (JWT Implementation) <br />
+Spring Data JPA (Hibernate) <br />
+WebSocket & STOMP <br />
+Spring Boot Actuator: For real-time health checks and metric gathering <br />
+Micrometer: To bridge Actuator metrics with external monitoring systems <br />
+Bucket4j (Rate limiting) <br />
+Lombok (Boilerplate reduction) <br />
+
+### Frontend
+React (Vite) <br />
+SockJS & Stomp.js (WebSocket clients) <br />
+Tailwind CSS (Styling) <br />
 
 ## Future improvements 
-
-Chat history UI (pagination scroll-back)<br />
 Typing indicator (“User is typing…”)<br />
-Read receipts & seen status<br />
-Contact search & user profiles<br />
+Online indicator (Like Messenger, a green dot)<br />
+Message status (Sent, Deliver, Read) <br />
+Searching inside the chat <br />
 File/image sharing inside chat<br />
-Push notifications for new messages<br />
-React / Angular frontend version<br />
+Maybe add calls <br />
+Prometheus & Grafana dashboard for visualizing message throughput and rate-limit triggers. <br />
