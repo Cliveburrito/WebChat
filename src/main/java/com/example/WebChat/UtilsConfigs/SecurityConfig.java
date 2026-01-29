@@ -48,7 +48,7 @@ public class SecurityConfig {
                 // Disable CSRF because the app uses stateless JWT authentication
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
-                // Do not create or use HTTP sessions — every request must authenticate via JWT
+                // Do not create or use HTTP sessions , every request must authenticate via jwt
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
@@ -56,6 +56,7 @@ public class SecurityConfig {
                 // Publicly accessible routes (no token required)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
+                                "/favicon.ico",
                            "/actuator/**",
                                 "/api/auth/**",
                                 "/ws/**"

@@ -14,7 +14,6 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -57,7 +56,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // Clients subscribe to destinations like /topic/room1
         config.enableSimpleBroker("/topic");
 
-        // Clients send messages to /app/... which are handled by @MessageMapping methods
+        // Clients send messages to /app/... which are handled by @MessageMapping methods in @Controller classes
         config.setApplicationDestinationPrefixes("/app");
     }
 
@@ -76,9 +75,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         log.info("registerStompEndpoints CALLED!");
 
         // WebSocket endpoint: ws://<host>/ws (with SockJS fallback)
+        // client needs to connect for the WebSocket handshake
         registry.addEndpoint("/ws").
                 setAllowedOrigins("http://localhost:5173").
-                withSockJS();
+                withSockJS()
+                .setHeartbeatTime(10000);
     }
 
     /**
@@ -105,50 +106,36 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 StompHeaderAccessor accessor =
                         MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
-                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-                    // Extract "Authorization" header from the WebSocket CONNECT frame
+                if (accessor == null) return message;
+
+                // Only authenticate on CONNECT
+                if (StompCommand.CONNECT.equals(accessor.getCommand())) {
+
                     String authHeader = accessor.getFirstNativeHeader("Authorization");
-                    System.out.println("WS CONNECT Authorization header = " + authHeader);
-
-                    // Expect header in form: "Authorization: Bearer <token>"
-                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                        String token = authHeader.substring(7);
-                        try {
-                            // Extract username from JWT
-                            String username = jwtService.extractUsername(token);
-                            System.out.println("WS CONNECT username from token = " + username);
-
-                            if (username != null) {
-                                // Load user details from your UserDetailsService
-                                UserDetails userDetails =
-                                        userDetailsService.loadUserByUsername(username);
-
-                                // Validate JWT against loaded user details
-                                if (jwtService.isTokenValid(token, userDetails)) {
-                                    // Create an Authentication object for the WebSocket session
-                                    Authentication auth =
-                                            new UsernamePasswordAuthenticationToken(
-                                                    userDetails,
-                                                    null,
-                                                    userDetails.getAuthorities()
-                                            );
-
-                                    // Attach authentication principal to the WebSocket session
-                                    accessor.setUser(auth);
-
-                                    System.out.println("WS Principal set to " + username);
-                                } else {
-                                    System.out.println("WS token NOT valid");
-                                }
-                            }
-                        } catch (Exception e) {
-                            log.warn("WS JWT error: {}", e.getMessage());
-                        }
-                    } else {
-                        System.out.println("WS CONNECT: no Authorization header");
+                    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                        // No token -> reject connection (optional)
+                        throw new IllegalArgumentException("Missing Authorization header");
                     }
+
+                    String token = authHeader.substring(7);
+
+                    // Validate token WITHOUT DB
+                    if (!jwtService.isTokenValid(token)) {  // implement: signature + exp check
+                        throw new IllegalArgumentException("Invalid JWT");
+                    }
+
+                    String username = jwtService.extractUsername(token);
+                    if (username == null || username.isBlank()) {
+                        throw new IllegalArgumentException("JWT has no subject");
+                    }
+
+
+                    Authentication auth =
+                            new UsernamePasswordAuthenticationToken(username, null, jwtService.extractAuthorities(token));
+
+                    accessor.setUser(auth);
                 }
-                // Return the (possibly modified) message so it can continue in the pipeline
+
                 return message;
             }
         });

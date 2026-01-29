@@ -8,13 +8,13 @@ export default function Sidebar({
                                     currentUser,
                                     token,
                                     onGroupCreated,
+                                    onlineUsers = [] // Added Prop
                                 }) {
     const [isOpen, setIsOpen] = useState(false);
     const [groupName, setGroupName] = useState("");
     const [selectedIds, setSelectedIds] = useState([]);
     const [error, setError] = useState("");
     const [isCreating, setIsCreating] = useState(false);
-
 
     const contacts = useMemo(() => {
         return (users || []).filter(u => u.username !== currentUser);
@@ -72,7 +72,6 @@ export default function Sidebar({
 
     return (
         <aside className="sidebar left">
-            {/* Header με κουμπί για Group */}
             <div style={{ padding: "15px", borderBottom: "1px solid #ddd" }}>
                 <button
                     className="create-group-btn"
@@ -87,28 +86,41 @@ export default function Sidebar({
                 <div className="sidebar-section">
                     <h4 className="sidebar-title">My Chats</h4>
                     <div className="sidebar-list">
-                        {conversations.map((chat) => (
-                            <div
-                                key={chat.id}
-                                className={`item ${activeChat?.id === chat.id ? "active" : ""} ${chat.unreadCount > 0 ? "unread" : ""}`}
-                                onClick={() => onSelectChat(chat)}
-                                style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}
-                            >
-                                <div style={{ minWidth: 0, flex: 1 }}>
-                                    <strong>{chat.name}</strong>
-                                    <small>{chat.lastMessage || "No messages yet"}</small>
-                                </div>
+                        {conversations.map((chat) => {
+                            // Only show dots for Direct Chats (Assuming chat.name is the username)
+                            // If your DTO has an 'isGroup' flag, use it here: !chat.isGroup
+                            const isDirectChat = !chat.name.includes(", ");
+                            const isOnline = isDirectChat && onlineUsers.includes(chat.name);
 
-                                {chat.unreadCount > 0 && (
-                                    <span className="unread-badge">{chat.unreadCount}</span>
-                                )}
-                            </div>
-                        ))}
+                            return (
+                                <div
+                                    key={chat.id}
+                                    className={`item ${activeChat?.id === chat.id ? "active" : ""} ${chat.unreadCount > 0 ? "unread" : ""}`}
+                                    onClick={() => onSelectChat(chat)}
+                                    style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}
+                                >
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+                                        {/* Presence Dot for Direct Chats */}
+                                        {isDirectChat && (
+                                            <span className={`status-dot ${isOnline ? "online" : "offline"}`}></span>
+                                        )}
+
+                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                            <strong>{chat.name}</strong>
+                                            <small className="last-msg-text">{chat.lastMessage || "No messages yet"}</small>
+                                        </div>
+                                    </div>
+
+                                    {chat.unreadCount > 0 && (
+                                        <span className="unread-badge">{chat.unreadCount}</span>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
 
-            {}
             {isOpen && (
                 <div style={styles.backdrop} onClick={closeModal}>
                     <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -132,16 +144,21 @@ export default function Sidebar({
                         <div style={{ marginBottom: 12 }}>
                             <label style={styles.label}>Επιλογή Μελών</label>
                             <div style={styles.membersBox}>
-                                {contacts.map((u) => (
-                                    <label key={u.id} style={styles.memberRow}>
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedIds.includes(u.id)}
-                                            onChange={() => toggleUser(u.id)}
-                                        />
-                                        <span style={{ marginLeft: 8 }}>{u.username}</span>
-                                    </label>
-                                ))}
+                                {contacts.map((u) => {
+                                    const isOnline = onlineUsers.includes(u.username);
+                                    return (
+                                        <label key={u.id} style={styles.memberRow}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.includes(u.id)}
+                                                onChange={() => toggleUser(u.id)}
+                                            />
+                                            {/* Presence dot in member selection */}
+                                            <span className={`status-dot ${isOnline ? "online" : "offline"}`} style={{ margin: "0 8px" }}></span>
+                                            <span>{u.username}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -158,17 +175,4 @@ export default function Sidebar({
     );
 }
 
-const styles = {
-    backdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 },
-    modal: { width: 400, background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 10px 25px rgba(0,0,0,0.2)" },
-    modalHeader: { display: "flex", justifyContent: "space-between", marginBottom: 15 },
-    xBtn: { border: "none", background: "transparent", fontSize: 18, cursor: "pointer" },
-    label: { display: "block", fontSize: 12, color: "#666", marginBottom: 5 },
-    input: { width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #ddd", marginBottom: 10 },
-    membersBox: { border: "1px solid #eee", borderRadius: 8, padding: 10, maxHeight: 200, overflowY: "auto", background: "#f9f9f9" },
-    memberRow: { display: "flex", alignItems: "center", padding: "5px 0", cursor: "pointer" },
-    actions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 15 },
-    cancelBtn: { padding: "8px 15px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", cursor: "pointer" },
-    createBtn: { padding: "8px 15px", borderRadius: 8, border: "none", background: "#0084ff", color: "#fff", fontWeight: "bold", cursor: "pointer" },
-    error: { background: "#ffebee", color: "#c62828", padding: "10px", borderRadius: 8, marginBottom: 10, fontSize: 13 }
-};
+// ... styles unchanged

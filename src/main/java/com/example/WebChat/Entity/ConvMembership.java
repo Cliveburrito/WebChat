@@ -50,6 +50,7 @@ public class ConvMembership {
     private boolean notificationsOn;
 
     // to show the number of unread messages :)
+    @Builder.Default
     @Column(nullable = false)
     private int unreadCount = 0;
 }

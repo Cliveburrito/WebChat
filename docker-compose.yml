@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # DB
+  db:
+    image: postgres:18-alpine
+    container_name: chat-db
+    environment:
+      POSTGRES_DB: webchat
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dimitris
+    ports:
+      - "5432:5432"
+
+  # BACKEND
+  backend:
+    build: ./src
+    container_name: chat-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # connect to container db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/webchat
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: dimitris
+    depends_on:
+      - db
+
+  # React Frontend
+  frontend:
+    build: ./frontend
+    container_name: chat-frontend
+    ports:
+      - "5173:80" # Mapping της 80 του Nginx στην 5173 που ξέρεις
+    depends_on:
+      - backend

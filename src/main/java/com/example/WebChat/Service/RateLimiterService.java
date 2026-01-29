@@ -29,7 +29,7 @@ public class RateLimiterService {
         return buckets.computeIfAbsent("MSG_" + username , k -> Bucket.builder()
                 .addLimit(limit -> limit
                         .capacity(5)
-                        .refillGreedy(5, Duration.ofSeconds(5)))
+                        .refillGreedy(5, Duration.ofSeconds(1)))
                 .build());
     }
 }

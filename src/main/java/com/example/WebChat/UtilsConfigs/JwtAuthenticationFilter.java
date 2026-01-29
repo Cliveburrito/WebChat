@@ -70,8 +70,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
-        // Debug marker: verify filter is being executed
-        log.info("JwtAuthenticationFilter invoked for URI: {}", request.getRequestURI());
+        String uri = request.getRequestURI();
+
+        // pass up on Prometheus,,,,too much noise
+        if (uri.endsWith("/actuator/prometheus")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         // Read Authorization header (expected format: "Bearer <jwt>")
         final String authHeader = request.getHeader("Authorization");
@@ -101,7 +106,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
             // Validate the JWT against the loaded user, meaning username match, expiration, signature
-            if (jwtService.isTokenValid(jwt, userDetails)) {
+            if (jwtService.isTokenValid(jwt)) {
 
                 // Create an authenticated token for the current user
                 UsernamePasswordAuthenticationToken authToken =

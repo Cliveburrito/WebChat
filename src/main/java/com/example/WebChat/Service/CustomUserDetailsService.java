@@ -2,6 +2,7 @@ package com.example.WebChat.Service;
 
 import com.example.WebChat.Repository.UserRepository;
 import lombok.RequiredArgsConstructor; // ← Lombok auto-generates constructor (no boilerplate!)
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -26,6 +27,7 @@ public class CustomUserDetailsService implements UserDetailsService {
      * - Must throw UsernameNotFoundException if user doesn’t exist
      * - Must return a UserDetails — NOT the user  entity directly
      */
+    @Cacheable(value = "users", key = "#username")
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 
@@ -34,7 +36,7 @@ public class CustomUserDetailsService implements UserDetailsService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
         // Convert the entity User to Spring Security's UserDetails
-        // Why? Spring doesn’t know your entity , it only knows UserDetails contract.
+        // Why? Spring doesn’t know our entity , it only knows UserDetails contract
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getUsername())
                 .password(user.getPasswordHash())

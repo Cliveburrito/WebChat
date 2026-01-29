@@ -1,15 +1,20 @@
 package com.example.WebChat.Service;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.security.Key;
+import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -59,6 +64,7 @@ public class JwtService {
                 .build()
                 .parseClaimsJws(token)           // Throws if invalid/expired/signature mismatch
                 .getBody();
+
         //This return the registered Claims found in  the payload of a JWT(JSON WEB TOKEN) I used a print on the above method and it printed this
         //{sub=Mitsaras, iat=1765026573, exp=1765112973} so it gives the SUBJECT that has been authenticated and iat / exp is issued time and
         //expiration time
@@ -70,6 +76,24 @@ public class JwtService {
     private Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
+
+    public Collection<? extends GrantedAuthority> extractAuthorities(String token) {
+        Claims claims = extractAllClaims(token);
+
+        Object rolesObj = claims.get("roles");
+        if (rolesObj == null) {
+            return List.of();
+        }
+
+        @SuppressWarnings("unchecked")
+        List<String> roles = (List<String>) rolesObj;
+
+        return roles.stream()
+                .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+                .map(SimpleGrantedAuthority::new)
+                .toList();
+    }
+
 
     // ───────────────────────────────────────────────────────
     // TOKEN GENERATION METHODS
@@ -104,8 +128,6 @@ public class JwtService {
     // ───────────────────────────────────────────────────────
 
     /**
-     * Validates a JWT against a {@link UserDetails} object.
-     *
      * <p>Checks that:</p>
      * <ol>
      *     <li>The token is not expired.</li>
@@ -114,9 +136,13 @@ public class JwtService {
      *
      * <p>Signature and structural validation are performed during claim extraction.</p>
      */
-    public boolean isTokenValid(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+    public boolean isTokenValid(String token) {
+        try {
+            extractAllClaims(token); // validates signature + exp
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /**
@@ -125,6 +151,7 @@ public class JwtService {
     private boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }
+
 
     // ───────────────────────────────────────────────────────
     // UTILITY METHODS
@@ -140,4 +167,25 @@ public class JwtService {
         byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
         return Keys.hmacShaKeyFor(keyBytes);
     }
+
+
+
+
+    // -----------------------------------------------------
+    // METHOD FOR TESTING
+    // -----------------------------------------------------
+
+    public String generateExpiredToken(String username) {
+
+        long now = System.currentTimeMillis();
+
+        return Jwts.builder()
+                .setClaims(null)                         // Custom claims (e.g. "roles": ["USER"])
+                .setSubject(username)         // Standard "sub" claim
+                .setIssuedAt(new Date(now))                    // "iat" — time of issue
+                .setExpiration(new Date(now - 1000L * 60 * 60 * 24)) // "exp" — expires in 24 hours
+                .signWith(getSignInKey(), SignatureAlgorithm.HS256)  // Sign with HMAC-SHA256
+                .compact();                                    // Serialize to compact JWT string
+    }
+
 }

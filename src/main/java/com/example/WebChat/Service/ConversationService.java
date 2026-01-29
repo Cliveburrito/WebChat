@@ -74,14 +74,8 @@ public class ConversationService {
      */
     @Transactional
     public void markAsRead(Long conversationId, String username) {
-        convMembershipRepository.findByUser_UsernameAndConversation_ConversationID(
-                username, conversationId).ifPresent(membership -> {
-                    if (membership.getUnreadCount() > 0) {
-                        membership.setUnreadCount(0);
-                        convMembershipRepository.save(membership);
-                        log.info("Marked conversation {} as read for user {}", conversationId, username);
-                    }
-                });
+        convMembershipRepository.resetUnreadCount(conversationId, username);
+        log.info("Marked conversation {} as read for user {}", conversationId, username);
     }
 
     /**
@@ -105,9 +99,9 @@ public class ConversationService {
     /**
      * Retrieves all conversations for a specific user with formatted display names and last messages
      */
-    public List<ConversationResponse> getUserChats(String username) {
+    /*public List<ConversationResponse> getUserChats(String username) {
         User currentUser = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         List<ConvMembership> memberships = convMembershipRepository.findAllByUser_Id(currentUser.getId());
         List<ConversationResponse> responseList = new ArrayList<>();
@@ -149,7 +143,25 @@ public class ConversationService {
         });
 
         return responseList;
+    }*/
+
+    public List<ConversationResponse> getUserChats(String username) {
+        User u = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        return convMembershipRepository.findUserChats(u.getId())
+                .stream()
+                .map(r -> new ConversationResponse(
+                        r.getConversationId(),
+                        r.getDisplayName(),
+                        "default-avatar.png",
+                        r.getLastContent(),
+                        r.getUnreadCount(),
+                        r.getLastMessageAt()
+                ))
+                .toList();
     }
+
 
     public Page<ChatMessageResponse> getMessagesByConversationId(Long conversationId, String currentUsername, int page, int size) {
         boolean isMember = convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(currentUsername, conversationId);

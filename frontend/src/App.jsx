@@ -19,13 +19,12 @@ function App() {
     const [currentUserId, setCurrentUserId] = useState(null);
     const [authView, setAuthView] = useState("login");
 
-    // 1. STATE ΓΙΑ ΤΟ THEME (Αρχικοποίηση από localStorage)
+    // 1. STATE FOR THEME & PRESENCE
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
 
     const activeChatRef = useRef(null);
     useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
 
-    // 2. ΣΥΝΑΡΤΗΣΗ ΕΝΑΛΛΑΓΗΣ ΘΕΜΑΤΟΣ
     const toggleTheme = () => {
         const newTheme = theme === "light" ? "dark" : "light";
         setTheme(newTheme);
@@ -49,7 +48,9 @@ function App() {
         });
     }, []);
 
-    useChatSocket({
+    // --- INTEGRATED WEBSOCKET HOOK ---
+    // Now receiving both stompClient and the real-time onlineUsers list
+    const { stompClient, onlineUsers } = useChatSocket({
         token,
         username: currentUser,
         onNotification: (dto) => {
@@ -166,14 +167,12 @@ function App() {
     }
 
     return (
-        /* 3. ΕΦΑΡΜΟΓΗ ΤΗΣ ΚΛΑΣΗΣ ΣΤΟ CONTAINER */
         <div className={`app-container ${theme === "dark" ? "dark-theme" : ""}`}>
             <header className="header">
                 <div>
                     <strong>WebChat</strong> | {currentUser}
                 </div>
 
-                {}
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                         onClick={toggleTheme}
@@ -209,9 +208,37 @@ function App() {
             </header>
 
             <div className="container">
-                <Sidebar conversations={conversations} activeChat={activeChat} onSelectChat={setActiveChat} onGroupCreated={onGroupCreated} token={token} />
-                <ChatArea activeChat={activeChat} messages={messages} currentUser={currentUser} token={token} setMessages={setMessages} onMessageSent={(msg) => bumpConversation(msg.conversationId, { content: msg.content, createdAt: msg.createdAt, isIncoming: false })} />
-                <RightSidebar users={allUsers} currentUser={currentUser} onOpenDirectChat={openDirectChat} />
+                {/* 1. Sidebar shows online dots for your recent chats */}
+                <Sidebar
+                    conversations={conversations}
+                    activeChat={activeChat}
+                    onSelectChat={setActiveChat}
+                    onGroupCreated={onGroupCreated}
+                    token={token}
+                    onlineUsers={onlineUsers}
+                />
+
+                <ChatArea
+                    activeChat={activeChat}
+                    messages={messages}
+                    currentUser={currentUser}
+                    token={token}
+                    setMessages={setMessages}
+                    stompClient={stompClient}
+                    onMessageSent={(msg) => bumpConversation(msg.conversationId, {
+                        content: msg.content,
+                        createdAt: msg.createdAt,
+                        isIncoming: false
+                    })}
+                />
+
+                {/* 2. RightSidebar shows online dots for the global user list */}
+                <RightSidebar
+                    users={allUsers}
+                    currentUser={currentUser}
+                    onOpenDirectChat={openDirectChat}
+                    onlineUsers={onlineUsers}
+                />
             </div>
         </div>
     );

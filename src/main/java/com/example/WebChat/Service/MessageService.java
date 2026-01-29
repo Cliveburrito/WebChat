@@ -1,7 +1,6 @@
 package com.example.WebChat.Service;
 
 import com.example.WebChat.DTO.ChatMessageResponse;
-import com.example.WebChat.Entity.ConvMembership;
 import com.example.WebChat.Entity.Conversation;
 import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Entity.User;
@@ -15,6 +14,8 @@ import io.github.bucket4j.Bucket;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -43,7 +44,7 @@ public class MessageService {
                 .build();
 
         //after saving in the db message will have it's generated id populated
-        message = messageRepository.save(message);
+        saveMessage(message);
 
         return message;
     }
@@ -55,8 +56,7 @@ public class MessageService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
 
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found: " + conversationId));
+        Conversation conversation = conversationRepository.getReferenceById(conversationId);
 
         boolean isMember = convMembershipRepository.existsByUser_IdAndConversation_ConversationID(user.getId(), conversationId);
         if (!isMember) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a member of this conversation.");
@@ -74,7 +74,7 @@ public class MessageService {
                 .sentAt(Instant.now())
                 .build();
 
-        msg = messageRepository.save(msg);
+        saveMessage(msg);
 
         ChatMessageResponse dto = new ChatMessageResponse(
                 msg.getMessage(),
@@ -86,14 +86,14 @@ public class MessageService {
         messagingTemplate.convertAndSend("/topic/chat/" + conversationId, dto);
 
         // unread + notifications
-        List<ConvMembership> members = convMembershipRepository.findAllByConversation_ConversationID(conversationId);
-        for (ConvMembership m : members) {
-            if (!m.getUser().getUsername().equals(username)) {
-                m.setUnreadCount(m.getUnreadCount() + 1);
-                convMembershipRepository.save(m);
-            }
-            messagingTemplate.convertAndSend("/topic/notifications/" + m.getUser().getUsername(), dto);
+        List<String> memberUsernames = convMembershipRepository.findUsernamesByConversationId(conversationId);
+
+        for (String recipient : memberUsernames) {
+            messagingTemplate.convertAndSend("/topic/notifications/" + recipient, dto);
         }
+
+        convMembershipRepository.incrementUnreadCountForOthers(conversationId, user.getId());
+
         log.info("Broadcasting message from {} to conversation {}", username, conversationId);
 
         return dto;
@@ -114,30 +114,27 @@ public class MessageService {
                 .message(content)
                 .build();
 
-        messageRepository.save(message);
+        saveMessage(message);
     }
 
     /**
      * Retrieves the history of messages for a conversation.
      * Note: For security, you should also verify membership here if calling from a generic controller.
      */
-    public List<ChatMessageResponse> getChatHistory(Long conversationId, String requestingUser) {
-        boolean isMember = convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(
-                requestingUser, conversationId);
+    public Page<ChatMessageResponse> getChatHistory(Long conversationId, Pageable pageable) {
+        // Fetch EVERYTHING in one query
+        Page<Message> messages = messageRepository.findByConversationIdWithSender(conversationId, pageable);
 
-        if (!isMember) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to chat history.");
-        }
+        // Map to DTO (The sender data is already in memory!)
+        return messages.map(m -> new ChatMessageResponse(
+                m.getMessage(),
+                m.getSentAt(),
+                m.getSender().getUsername(),
+                conversationId
+        ));
+    }
 
-        List<Message> messages = messageRepository.findAllByConversation_ConversationIDOrderBySentAtAsc(conversationId);
-
-        return messages.stream()
-                .map(m -> new ChatMessageResponse(
-                        m.getMessage(),
-                        m.getSentAt(),
-                        (m.getSender() != null) ? m.getSender().getUsername() : "Deleted User",
-                        conversationId
-                ))
-                .toList();
+    public Message saveMessage(Message message) {
+        return messageRepository.save(message);
     }
 }

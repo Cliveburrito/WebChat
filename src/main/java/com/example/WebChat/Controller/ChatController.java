@@ -4,27 +4,31 @@ import com.example.WebChat.DTO.ChatMessageResponse;
 import com.example.WebChat.Service.MessageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
-import java.util.List;
 
 @Slf4j
-@RestController
+@Controller // Use @Controller for hybrid classes
 @RequiredArgsConstructor
-@RequestMapping("/api/messages") // base path for REST endpoints
 public class ChatController {
 
     private final MessageService messageService;
-
+    private final SimpMessagingTemplate messagingTemplate;
     /**
      * WebSocket Endpoint: Handles messages sent to /app/chat/{conversationId}
      * The @MessageMapping prefix (/app) is defined in WebSocketConfig.
-     *
+     * <p>
      * FOR NOW, I AM NOT USING THIS IN THE FRONTEND I AM PLAYING WITH A HYBRID MODEL
      * I USE REST FOR SENDING A MESSAGE AND A WEBSOCKET FOR RECEIVING THE MESSAGES, I LL STILL KEEP IT
      * IN CASE I WANT TO SWAP TO PURE SOCKET INTERACTION.
@@ -44,10 +48,23 @@ public class ChatController {
         messageService.processAndSend(username, conversationId, content);
     }
 
-
-    /**This is what my frontend currently uses to send a message, this endpoint not the socket
+    /**
+     * This method is responsible for broadcasting the typing event
      */
-    @PostMapping("/chat/{id}/smsg")
+    @MessageMapping("/chat/{conversationId}/typing")
+    public void handleTyping(@DestinationVariable Long conversationId,
+                             Principal principal) {
+        String username = principal.getName();
+        messagingTemplate.convertAndSend("/topic/chat/" + conversationId + "/typing", username);
+        log.info("Typing...");
+    }
+
+
+    /**
+     * This is what my frontend currently uses to send a message, this endpoint not the socket
+     */
+    @PostMapping("/api/messages/chat/{id}/smsg") // Move full path here
+    @ResponseBody // Required since we removed @RestController
     public ResponseEntity<ChatMessageResponse> sendMessage(
             Principal principal,
             @PathVariable Long id,
@@ -62,14 +79,16 @@ public class ChatController {
      * rest endpoint that retrieves message history for a specific conversation.
      */
     @GetMapping("/history/{conversationId}")
-    public ResponseEntity<List<ChatMessageResponse>> getChatHistory(
+    public ResponseEntity<Page<ChatMessageResponse>> getChatHistory(
             Principal principal,
-            @PathVariable Long conversationId
+            @PathVariable Long conversationId,
+            @PageableDefault(size = 20, sort = "sentAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         String username = principal.getName();
         log.info("User {} requesting history for conversation {}", username, conversationId);
 
-        List<ChatMessageResponse> history = messageService.getChatHistory(conversationId, username);
+        // Change the service call to accept pageable
+        Page<ChatMessageResponse> history = messageService.getChatHistory(conversationId, pageable);
         return ResponseEntity.ok(history);
     }
 }
