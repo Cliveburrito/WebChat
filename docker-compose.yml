@@ -11,26 +11,80 @@ services:
       POSTGRES_PASSWORD: dimitris
     ports:
       - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data:Z
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: chat-mq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - mq_data:/var/lib/rabbitmq:Z # Χρήση Named Volume + :Z
+
+  # Cache Layer (Redis)
+  redis:
+    image: redis:7-alpine
+    container_name: chat-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data:Z # Χρήση Named Volume + :Z
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: chat-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:Z # ΠΡΟΣΟΧΗ: Εδώ θέλει το :Z οπωσδήποτε
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: chat-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+
+# Ορισμός των Named Volumes στο τέλος
+volumes:
+  db_data:
+  mq_data:
+  redis_data:
+
 
   # BACKEND
-  backend:
-    build: ./src
-    container_name: chat-backend
-    ports:
-      - "8080:8080"
-    environment:
-      # connect to container db
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/webchat
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: dimitris
-    depends_on:
-      - db
-
-  # React Frontend
-  frontend:
-    build: ./frontend
-    container_name: chat-frontend
-    ports:
-      - "5173:80" # Mapping της 80 του Nginx στην 5173 που ξέρεις
-    depends_on:
-      - backend
+#  #backend:
+#    build: .
+#    container_name: chat-backend
+#    ports:
+#      - "8080:8080"
+#    environment:
+#      # connect to container db
+#      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/WebChat
+#      SPRING_DATASOURCE_USERNAME: postgres
+#      SPRING_DATASOURCE_PASSWORD: dimitris
+#      # RabbitMQ Connection
+#      SPRING_RABBITMQ_HOST: rabbitmq
+#      SPRING_RABBITMQ_PORT: 5672
+#      SPRING_RABBITMQ_USERNAME: guest
+#      SPRING_RABBITMQ_PASSWORD: guest
+#    depends_on:
+#      - db
+#      - rabbitmq
+#
+#  # React Frontend
+#  frontend:
+#    build: ./frontend
+#    container_name: chat-frontend
+#    ports:
+#      - "5173:80" # Mapping της 80 του Nginx στην 5173 που ξέρεις
+#    depends_on:
+#      - backend

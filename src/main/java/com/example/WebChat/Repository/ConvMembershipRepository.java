@@ -26,7 +26,7 @@ public interface ConvMembershipRepository extends JpaRepository<ConvMembership, 
 
     @Query(value = """
     SELECT
-        c.conversationid AS conversationId,
+        c.conversationid AS conversation_id,
 
         CASE
             WHEN c.is_group = true THEN c.conversation_name
@@ -35,7 +35,8 @@ public interface ConvMembershipRepository extends JpaRepository<ConvMembership, 
 
         COALESCE(lm.message, 'No messages yet') AS lastContent,
         lm.sent_at AS lastMessageAt,
-        me.unread_count AS unreadCount
+        me.unread_count AS unreadCount,
+        me.muted AS muted
 
     FROM conversations c
 
@@ -45,11 +46,12 @@ public interface ConvMembershipRepository extends JpaRepository<ConvMembership, 
      AND me.user_id = :userId
 
     -- other member ONLY for direct chats
+            --we get the other userId from the convMembership entity
     LEFT JOIN conversation_membership other_m
       ON c.is_group = false
      AND other_m.conversation_id = c.conversationid
      AND other_m.user_id <> :userId
-
+            -- we get the other user entity from the id we got above
     LEFT JOIN users other_u
       ON c.is_group = false
      AND other_u.id = other_m.user_id
@@ -80,5 +82,10 @@ public interface ConvMembershipRepository extends JpaRepository<ConvMembership, 
     @Query("UPDATE ConvMembership cm SET cm.unreadCount = 0 " +
             "WHERE cm.conversation.conversationID = :convId AND cm.user.username = :username")
     void resetUnreadCount(@Param("convId") Long convId, @Param("username") String username);
+
+    @Modifying
+    @Query(value = "UPDATE ConvMembership cm SET cm.muted = :status " +
+            "WHERE cm.conversation.conversationID = :convId AND cm.user.username = :username")
+    void toggleMute(@Param("username") String username, @Param("convId") Long convId, @Param("status") boolean status);
 }
 

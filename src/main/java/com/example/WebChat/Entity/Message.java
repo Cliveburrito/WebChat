@@ -36,7 +36,7 @@ public class Message {
     /**
      * Reference to the USER who sent this message.
      *
-     * Many messages can be sent by the SAME user → ManyToOne.
+     * Many messages can be sent by the SAME user -> ManyToOne.
      * JPA will create a foreign key column named "sender_id" in the "messages" table.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -47,7 +47,7 @@ public class Message {
     /**
      * Reference to the CONVERSATION this message belongs to.
      *
-     * Many messages belong to the SAME conversation → ManyToOne.
+     * Many messages belong to the SAME conversation -> ManyToOne.
      * JPA will create a foreign key column named "conversation_id" in the "messages" table.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

@@ -36,12 +36,12 @@ class RateLimiterServiceTest {
         Bucket bucket = rateLimiterService.resolveMessageBucket(username);
 
         // Act & Assert
-        // Η χωρητικότητα είναι 5. Καταναλώνουμε 5 tokens.
+        // capacity is 5 so consume 5
         for (int i = 0; i < 5; i++) {
             assertTrue(bucket.tryConsume(1), "Should allow message " + (i + 1));
         }
 
-        // Το 6ο μήνυμα πρέπει να απορριφθεί αμέσως
+        // 6th message gots to go
         assertFalse(bucket.tryConsume(1), "Should block the 6th message");
     }
 

@@ -1,23 +1,16 @@
 package com.example.WebChat.Service;
 
-import com.example.WebChat.DTO.ChatMessageResponse;
 import com.example.WebChat.DTO.ConversationResponse;
 import com.example.WebChat.DTO.OpenGroupChatRequest;
 import com.example.WebChat.Entity.ConvMembership;
 import com.example.WebChat.Entity.Conversation;
-import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Entity.User;
 import com.example.WebChat.Exception.ResourceNotFoundException;
 import com.example.WebChat.Repository.ConversationRepository;
 import com.example.WebChat.Repository.ConvMembershipRepository;
-import com.example.WebChat.Repository.MessageRepository;
 import com.example.WebChat.Repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,7 +25,6 @@ public class ConversationService {
     private final ConversationRepository conversationRepository;
     private final ConvMembershipRepository convMembershipRepository;
     private final UserRepository userRepository;
-    private final MessageRepository messageRepository;
 
     /**
      * Creates or retrieves a 1-1 direct conversation between two users.
@@ -52,7 +44,7 @@ public class ConversationService {
                 boolean isOtherPresent = convMembershipRepository.existsByUser_IdAndConversation_ConversationID(user2ID, conv.getConversationID());
                 if (isOtherPresent) {
                     log.info("Found existing direct conversation (ID: {})", conv.getConversationID());
-                    // return the Id at once
+                    // return the ID at once
                     return conv.getConversationID();
                 }
             }
@@ -96,55 +88,6 @@ public class ConversationService {
         return createConversationFunction(users, true, request.groupName());
     }
 
-    /**
-     * Retrieves all conversations for a specific user with formatted display names and last messages
-     */
-    /*public List<ConversationResponse> getUserChats(String username) {
-        User currentUser = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        List<ConvMembership> memberships = convMembershipRepository.findAllByUser_Id(currentUser.getId());
-        List<ConversationResponse> responseList = new ArrayList<>();
-
-        for (ConvMembership m : memberships) {
-            Conversation conv = m.getConversation();
-
-            String displayName = conv.getConversationName();
-            if (!conv.isGroup()) {
-                displayName = convMembershipRepository.findAllByConversation_ConversationID(conv.getConversationID())
-                        .stream()
-                        .map(membership -> membership.getUser().getUsername())
-                        .filter(name -> !name.equals(username))
-                        .findFirst()
-                        .orElse("Direct Chat");
-            }
-
-            Optional<Message> lastMsg = messageRepository.findLastMessage(conv.getConversationID());
-
-            String lastContent = lastMsg.map(Message::getMessage).orElse("No messages yet");
-            Instant sentAt = lastMsg.map(Message::getSentAt).orElse(null);
-
-            responseList.add(new ConversationResponse(
-                    conv.getConversationID(),
-                    displayName,
-                    "default-avatar.png",
-                    lastContent,
-                    m.getUnreadCount(),
-                    sentAt // might be null if no msgs
-            ));
-        }
-
-        // Sorting to have the latest message first
-        responseList.sort((a, b) -> {
-            if (a.lastMessageAt() == null && b.lastMessageAt() == null) return 0;
-            if (a.lastMessageAt() == null) return 1;
-            if (b.lastMessageAt() == null) return -1;
-            return b.lastMessageAt().compareTo(a.lastMessageAt());
-        });
-
-        return responseList;
-    }*/
-
     public List<ConversationResponse> getUserChats(String username) {
         User u = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -162,25 +105,6 @@ public class ConversationService {
                 .toList();
     }
 
-
-    public Page<ChatMessageResponse> getMessagesByConversationId(Long conversationId, String currentUsername, int page, int size) {
-        boolean isMember = convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(currentUsername, conversationId);
-
-        if (!isMember) {
-            throw new AccessDeniedException("You are not a member of this conversation.");
-        }
-
-        PageRequest pageable = PageRequest.of(page, size, Sort.by("sentAt").descending());
-
-        Page<Message> messagesPage = messageRepository.findByConversation_ConversationID(conversationId, pageable);
-
-        return messagesPage.map(m -> new ChatMessageResponse(
-                m.getMessage(),
-                m.getSentAt(),
-                m.getSender().getUsername(),
-                conversationId
-        ));
-    }
     /**
      * Internal helper to persist a new Conversation and its Memberships.
      */
@@ -207,5 +131,11 @@ public class ConversationService {
         convMembershipRepository.saveAll(memberships);
 
         return conversation;
+    }
+
+    @Transactional
+    public void toggleMute(String username, Long conversationId, boolean status) {
+        // Βρίσκουμε το membership του συγκεκριμένου χρήστη για το συγκεκριμένο chat
+        convMembershipRepository.toggleMute(username, conversationId, status);
     }
 }

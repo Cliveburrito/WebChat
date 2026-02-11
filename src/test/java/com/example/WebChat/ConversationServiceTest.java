@@ -35,7 +35,7 @@ public class ConversationServiceTest {
 
     @Test
     void createGroupChatSuccessfully() {
-        // 1. Arrange
+        // Arrange
         String creatorName = "Mitsos";
         OpenGroupChatRequest request = new OpenGroupChatRequest(List.of(2L, 3L), "Our Group");
 
@@ -60,13 +60,13 @@ public class ConversationServiceTest {
         assertEquals("Our Group", result.getConversationName());
         assertTrue("", result.isGroup());
 
-        // Verify:
+        // Verify
         verify(conversationRepository, times(1)).save(any(Conversation.class));
         verify(convMembershipRepository, times(1)).saveAll(anyList());
 
-        // Έλεγχος αν ο δημιουργός προστέθηκε όντως στη λίστα (σύνολο 3 άτομα)
+        // Verify list is created and has 3 people
         verify(userRepository).findAllById(argThat(iterable -> {
-            // Μετατρέπουμε το Iterable σε List για να έχουμε την .contains()
+            // Convert Iterable to List so that we can have .contains()
             List<Long> list = new ArrayList<>();
             iterable.forEach(list::add);
 
@@ -81,7 +81,7 @@ public class ConversationServiceTest {
 
         conversationService.markAsRead(convId, username);
 
-        // Επιβεβαιώνουμε ότι το repository κλήθηκε με τις σωστές παραμέτρους
+        // Verify the repository got called with the right parameters
         verify(convMembershipRepository, times(1)).resetUnreadCount(convId, username);
     }
 

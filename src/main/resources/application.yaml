@@ -2,34 +2,64 @@ spring:
   application:
     name: WebChat
 
+  # Database Configuration (PostgreSQL)
+  # The host defaults to 'localhost' for local IDE runs,
+  # but can be overridden by 'db' when running in Docker.
   datasource:
-    url: jdbc:postgresql://localhost:5432/WebChat
-    username: postgres
-    password: dimitris
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/webchat
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:dimitris}
+    driver-class-name: org.postgresql.Driver
 
+  # JPA & Hibernate Settings
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: update # Automatically creates/updates tables based on Java Entities
+    show-sql: true     # Logs SQL queries to the console for debugging
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
+        use_sql_comments: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
+  # Message Broker (RabbitMQ)
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: 5672
+    username: ${RABBIT_USER:guest}
+    password: ${RABBIT_PASSWORD:guest}
+
+  # Cache Layer (Redis)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+    web:
+      pageable:
+        serialization-mode: via-dto
+
+# Monitoring and Observability (Spring Actuator & Prometheus)
 management:
   endpoints:
     web:
       exposure:
-        # Exposes the most important endpoints for a professional setup
         include: "health,info,metrics,prometheus"
   endpoint:
     health:
-      # Shows details like "db: UP", "diskSpace: UP" instead of just "status: UP"
-      show-details: always
+      show-details: always # Provides status for DB, Disk, RabbitMQ, etc.
   metrics:
     tags:
-      # This adds the application name to every metric (crucial for microservices)
       application: ${spring.application.name}
   prometheus:
     metrics:
       export:
         enabled: true
+
+# Custom Application Security Settings
+application:
+  security:
+    jwt:
+      # HS512 requires a 64-character (512-bit) secret key
+      secret-key: "6b7c8d9eafb0c1d2e33f8e6c4b3a2d1f9e7c5233sab4a39281726354455464758696a"
+      #expiration: 86400000 # 24 hours in milliseconds

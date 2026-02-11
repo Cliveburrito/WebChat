@@ -8,72 +8,48 @@ import { apiJson } from "./api";
 import { useChatSocket } from "./hooks/useChatSocket";
 
 function App() {
+    // ==========================================
+    // 1. STATE MANAGEMENT
+    // ==========================================
+
+    // Auth & Identity
     const [token, setToken] = useState(localStorage.getItem("token"));
     const [currentUser, setCurrentUser] = useState(localStorage.getItem("username") || "");
+    const [currentUserId, setCurrentUserId] = useState(null);
+    const [authView, setAuthView] = useState("login");
+
+    // Chat Data & UI
     const [conversations, setConversations] = useState([]);
     const [allUsers, setAllUsers] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
+
+    // Pagination for Messages
     const [msgPage, setMsgPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
-    const [currentUserId, setCurrentUserId] = useState(null);
-    const [authView, setAuthView] = useState("login");
 
-    // 1. STATE FOR THEME & PRESENCE
+    // Settings
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
+    const [stealthMode, setStealthMode] = useState(false);
 
+    // ==========================================
+    // 2. REFS
+    // ==========================================
     const activeChatRef = useRef(null);
-    useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+    useEffect(() => {
+        activeChatRef.current = activeChat;
+    }, [activeChat]);
 
-    const toggleTheme = () => {
-        const newTheme = theme === "light" ? "dark" : "light";
-        setTheme(newTheme);
-        localStorage.setItem("theme", newTheme);
-    };
-
-    const bumpConversation = useCallback((conversationId, { content, createdAt, isIncoming }) => {
-        setConversations((prev) => {
-            const idx = prev.findIndex((c) => c.id === conversationId);
-            if (idx === -1) return prev;
-            const isOpen = activeChatRef.current?.id === conversationId;
-            const updated = {
-                ...prev[idx],
-                lastMessage: content,
-                lastMessageAt: createdAt || new Date().toISOString(),
-                unreadCount: isIncoming && !isOpen ? (prev[idx].unreadCount + 1) : (isOpen ? 0 : prev[idx].unreadCount),
-            };
-            const copy = [...prev];
-            copy.splice(idx, 1);
-            return [updated, ...copy];
-        });
-    }, []);
-
-    // --- INTEGRATED WEBSOCKET HOOK ---
-    // Now receiving both stompClient and the real-time onlineUsers list
-    const { stompClient, onlineUsers } = useChatSocket({
-        token,
-        username: currentUser,
-        onNotification: (dto) => {
-            bumpConversation(dto.conversationId, {
-                content: dto.content,
-                createdAt: dto.createdAt,
-                isIncoming: dto.senderUsername !== currentUser
-            });
-            if (activeChatRef.current?.id === dto.conversationId) {
-                if (dto.senderUsername !== currentUser) {
-                    setMessages((prev) => [...prev, dto]);
-                    markChatRead(dto.conversationId);
-                }
-            }
-        },
-    });
+    // ==========================================
+    // 3. API FETCHERS (Data Loading)
+    // ==========================================
 
     const fetchChats = useCallback(async () => {
         if (!token) return;
         try {
             const data = await apiJson("/api/chats/my", { token });
             setConversations(Array.isArray(data) ? data : []);
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error("Error fetching chats:", err); }
     }, [token]);
 
     const fetchUsers = useCallback(async () => {
@@ -84,7 +60,7 @@ function App() {
             setAllUsers(list);
             const me = list.find((u) => u.username === currentUser);
             if (me) setCurrentUserId(me.id);
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error("Error fetching users:", err); }
     }, [token, currentUser]);
 
     const fetchMessages = useCallback(async (chatId, page = 0) => {
@@ -92,18 +68,48 @@ function App() {
         try {
             const data = await apiJson(`/api/chats/${chatId}/messages?page=${page}&size=20`, { token });
             const fetched = (data?.content || []).slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-            if (page === 0) setMessages(fetched);
-            else setMessages((prev) => [...fetched, ...prev]);
+
+            if (page === 0) {
+                setMessages(fetched);
+            } else {
+                setMessages((prev) => [...fetched, ...prev]);
+            }
+
             setHasMore(!data?.last);
             setMsgPage(page);
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error("Error fetching messages:", err); }
     }, [token]);
 
     const markChatRead = useCallback(async (chatId) => {
         if (!token || !chatId) return;
-        setConversations((prev) => prev.map((c) => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
-        try { await apiJson(`/api/chats/${chatId}/read`, { token, method: "POST" }); } catch {}
+        setConversations(prev => prev.map(c =>
+            (c.id === chatId || c.conversationId === chatId) ? { ...c, unreadCount: 0 } : c
+        ));
+        try { await apiJson(`/api/chats/${chatId}/read`, { token, method: "POST" }); } catch { /* empty */ }
     }, [token]);
+
+    // ==========================================
+    // 4. CHAT ACTIONS & LOGIC
+    // ==========================================
+
+    const bumpConversation = useCallback((conversationId, { content, createdAt, isIncoming }) => {
+        setConversations((prev) => {
+            const idx = prev.findIndex((c) => (c.id === conversationId || c.conversationId === conversationId));
+            if (idx === -1) return prev;
+
+            const isOpen = (activeChatRef.current?.id === conversationId || activeChatRef.current?.conversationId === conversationId);
+            const updated = {
+                ...prev[idx],
+                lastContent: content,
+                lastMessage: content,
+                lastMessageAt: createdAt || new Date().toISOString(),
+                unreadCount: isIncoming && !isOpen ? (prev[idx].unreadCount + 1) : (isOpen ? 0 : prev[idx].unreadCount),
+            };
+            const copy = [...prev];
+            copy.splice(idx, 1);
+            return [updated, ...copy];
+        });
+    }, []);
 
     const openDirectChat = useCallback(async (otherUserId) => {
         if (!token || !currentUserId) return;
@@ -115,39 +121,143 @@ function App() {
             });
             const convId = data?.conversationID;
             await fetchChats();
+
             if (convId) {
                 setTimeout(() => {
                     setConversations((list) => {
-                        const chat = list.find((c) => c.id === convId);
+                        const chat = list.find((c) => c.id === convId || c.conversationId === convId);
                         if (chat) setActiveChat(chat);
                         return list;
                     });
                 }, 100);
             }
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error("Error opening direct chat:", err); }
     }, [token, currentUserId, fetchChats]);
 
     const onGroupCreated = useCallback(async (createdConv) => {
         await fetchChats();
-        const newId = createdConv?.conversationID;
+        const newId = createdConv?.conversationID || createdConv?.id;
         if (newId) {
             setConversations((list) => {
-                const chat = list.find((c) => c.id === newId);
+                const chat = list.find((c) => c.id === newId || c.conversationId === newId);
                 if (chat) setActiveChat(chat);
                 return list;
             });
         }
     }, [fetchChats]);
 
-    useEffect(() => { if (token) fetchChats(); }, [token, fetchChats]);
-    useEffect(() => { if (token) fetchUsers(); }, [token, fetchUsers]);
+    const toggleMute = async (conversationId, currentMuteStatus) => {
+        const newStatus = !currentMuteStatus;
+
+        // 1. Ενημέρωσε το UI ΑΜΕΣΩΣ (Optimistic Update) για να φανεί η αλλαγή γρήγορα
+        setConversations(prev => prev.map(c =>
+            (c.conversationId === conversationId || c.id === conversationId)
+                ? { ...c, muted: newStatus }
+                : c
+        ));
+
+        if (activeChat?.conversationId === conversationId || activeChat?.id === conversationId) {
+            // ΑΥΤΟ ΕΙΝΑΙ ΠΟΥ ΑΛΛΑΖΕΙ ΤΟ ΚΑΜΠΑΝΑΚΙ ΣΤΟ HEADER
+            setActiveChat(prev => ({ ...prev, muted: newStatus }));
+        }
+
+        try {
+            // 2. Στείλε το request στο backend
+            const response = await fetch(`/api/chats/${conversationId}/mute?status=${newStatus}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) throw new Error("Failed to mute");
+            console.log("Mute status updated on server");
+
+        } catch (err) {
+            console.error("Mute toggle failed, reverting:", err);
+            // Αν αποτύχει, γύρνα το πίσω (προαιρετικό safety)
+        }
+    };
+
+    // ==========================================
+    // 5. WEBSOCKET INTEGRATION
+    // ==========================================
+    const { stompClient, onlineUsers } = useChatSocket({
+        token,
+        username: currentUser,
+        onNotification: (dto) => {
+            const chat = conversations.find(c => (c.conversationId === dto.conversationId || c.id === dto.conversationId));
+
+            bumpConversation(dto.conversationId, {
+                content: dto.content,
+                createdAt: dto.createdAt,
+                isIncoming: dto.senderUsername !== currentUser
+            });
+
+            if (dto.senderUsername !== currentUser) {
+                if (!chat?.muted) {
+                    // console.log("Play notification sound!");
+                }
+
+                const isActive = (activeChatRef.current?.id === dto.conversationId || activeChatRef.current?.conversationId === dto.conversationId);
+                if (isActive) {
+                    setMessages((prev) => [...prev, dto]);
+                    markChatRead(dto.conversationId);
+                }
+            }
+        },
+    });
+
+    // ==========================================
+    // 6. UI & SETTINGS HANDLERS
+    // ==========================================
+
+    const toggleTheme = () => {
+        const newTheme = theme === "light" ? "dark" : "light";
+        setTheme(newTheme);
+        localStorage.setItem("theme", newTheme);
+    };
+
+    const toggleStealthMode = async () => {
+        const newStatus = !stealthMode;
+        try {
+            const response = await fetch(`/api/users/me/stealth?enabled=${newStatus}`, {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (response.ok) setStealthMode(newStatus);
+        } catch (err) { console.error("Stealth update failed:", err); }
+    };
+
+    const handleLogout = () => {
+        localStorage.clear();
+        window.location.reload();
+    };
+
+    // ==========================================
+    // 7. INITIALIZATION & LIFECYCLE EFFECTS
+    // ==========================================
 
     useEffect(() => {
-        if (!activeChat?.id) return;
+        if (token) {
+            fetchChats();
+            fetchUsers();
+        }
+    }, [token, fetchChats, fetchUsers]);
+
+    useEffect(() => {
+        const chatId = activeChat?.conversationId || activeChat?.id;
+        if (!chatId) return;
+
         setHasMore(true);
-        fetchMessages(activeChat.id, 0);
-        markChatRead(activeChat.id);
-    }, [activeChat?.id, fetchMessages, markChatRead]);
+        fetchMessages(chatId, 0);
+        markChatRead(chatId);
+    }, [activeChat?.id, activeChat?.conversationId, fetchMessages, markChatRead]);
+
+    // ==========================================
+    // 8. RENDER LOGIC
+    // ==========================================
 
     if (!token) {
         return authView === "login" ? (
@@ -177,29 +287,32 @@ function App() {
                     <button
                         onClick={toggleTheme}
                         style={{
-                            padding: '5px 12px',
-                            cursor: 'pointer',
-                            borderRadius: '15px',
-                            border: '1px solid var(--border-color)',
-                            background: 'var(--sidebar-bg)',
-                            color: 'var(--text-main)',
-                            fontSize: '0.85rem'
+                            padding: '5px 12px', cursor: 'pointer', borderRadius: '15px',
+                            border: '1px solid var(--border-color)', background: 'var(--sidebar-bg)',
+                            color: 'var(--text-main)', fontSize: '0.85rem'
                         }}
                     >
                         {theme === "light" ? "🌙 Dark" : "☀️ Light"}
                     </button>
 
-                    <button
-                        onClick={() => { localStorage.clear(); window.location.reload(); }}
+                    <span
+                        onClick={toggleStealthMode}
                         style={{
-                            padding: '5px 12px',
-                            cursor: 'pointer',
-                            borderRadius: '15px',
-                            border: 'none',
-                            background: '#ff4d4d',
-                            color: 'white',
-                            fontSize: '0.85rem',
-                            fontWeight: 'bold'
+                            cursor: 'pointer', fontSize: '1.4rem',
+                            filter: stealthMode ? 'drop-shadow(0 0 5px #6c5ce7)' : 'grayscale(1)',
+                            opacity: stealthMode ? 1 : 0.5, transition: 'all 0.3s ease'
+                        }}
+                        title={stealthMode ? "Invisible Mode!" : "Visible"}
+                    >
+                        👻
+                    </span>
+
+                    <button
+                        onClick={handleLogout}
+                        style={{
+                            padding: '5px 12px', cursor: 'pointer', borderRadius: '15px',
+                            border: 'none', background: '#ff4d4d', color: 'white',
+                            fontSize: '0.85rem', fontWeight: 'bold'
                         }}
                     >
                         Logout
@@ -208,12 +321,13 @@ function App() {
             </header>
 
             <div className="container">
-                {/* 1. Sidebar shows online dots for your recent chats */}
                 <Sidebar
                     conversations={conversations}
+                    users={allUsers}
                     activeChat={activeChat}
                     onSelectChat={setActiveChat}
                     onGroupCreated={onGroupCreated}
+                    currentUser={currentUser}
                     token={token}
                     onlineUsers={onlineUsers}
                 />
@@ -221,6 +335,8 @@ function App() {
                 <ChatArea
                     activeChat={activeChat}
                     messages={messages}
+                    hasMore={hasMore}
+                    onLoadMore={() => fetchMessages(activeChat?.conversationId || activeChat?.id, msgPage + 1)}
                     currentUser={currentUser}
                     token={token}
                     setMessages={setMessages}
@@ -230,9 +346,9 @@ function App() {
                         createdAt: msg.createdAt,
                         isIncoming: false
                     })}
+                    onToggleMute={toggleMute}
                 />
 
-                {/* 2. RightSidebar shows online dots for the global user list */}
                 <RightSidebar
                     users={allUsers}
                     currentUser={currentUser}

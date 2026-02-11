@@ -84,7 +84,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String username;
 
         // If no Authorization header or does not start with "Bearer ", skip JWT processing
-        // The request continues unauthenticated (may still access public endpoints)
+        // The request continues unauthenticated (it may still access public endpoints)
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;

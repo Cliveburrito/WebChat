@@ -1,6 +1,5 @@
 package com.example.WebChat.UtilsConfigs;
 
-import com.example.WebChat.Service.CustomUserDetailsService;
 import com.example.WebChat.Service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
@@ -37,7 +36,6 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final JwtService jwtService;
-    private final CustomUserDetailsService userDetailsService;
 
     /**
      * Configures the message broker, which is responsible for routing messages
@@ -71,11 +69,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      */
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // Debug: verify that endpoint registration runs during startup
+        // verify that endpoint registration runs during startup
         log.info("registerStompEndpoints CALLED!");
 
-        // WebSocket endpoint: ws://<host>/ws (with SockJS fallback)
-        // client needs to connect for the WebSocket handshake
+        // WebSocket endpoint: ws://<host>/ws with SockJS fallback
+        // client needs to connect for the webSocket handshake
         registry.addEndpoint("/ws").
                 setAllowedOrigins("http://localhost:5173").
                 withSockJS()
@@ -93,11 +91,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      *   <li>Set the authenticated {@link Authentication} principal on the WebSocket session.</li>
      * </ul>
      * </p>
-
      */
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        System.out.println("configureClientInboundChannel CALLED!");
+        System.out.println("configureClientInboundChannel CALLED!!!!!");
 
         registration.interceptors(new ChannelInterceptor() {
             @Override
@@ -119,8 +116,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
                     String token = authHeader.substring(7);
 
-                    // Validate token WITHOUT DB
-                    if (!jwtService.isTokenValid(token)) {  // implement: signature + exp check
+                    // Validate token WITHOUT DB!!!
+                    if (!jwtService.isTokenValid(token)) {  // implement: signature + expiration check
                         throw new IllegalArgumentException("Invalid JWT");
                     }
 
@@ -131,7 +128,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
 
                     Authentication auth =
-                            new UsernamePasswordAuthenticationToken(username, null, jwtService.extractAuthorities(token));
+                            new UsernamePasswordAuthenticationToken(
+                                    username, null, jwtService.extractAuthorities(token));
 
                     accessor.setUser(auth);
                 }

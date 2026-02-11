@@ -1,5 +1,6 @@
 package com.example.WebChat.Controller;
 
+import com.example.WebChat.DTO.CachedUser;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -7,6 +8,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.socket.messaging.SessionConnectEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
@@ -33,11 +35,13 @@ public class PresenceEventListener {
     public void handleWebSocketConnectListener(SessionConnectEvent event) {
         StompHeaderAccessor sha = StompHeaderAccessor.wrap(event.getMessage());
         Principal principal = sha.getUser();
+
         if (principal != null) {
             String username = principal.getName();
+
             onlineUsers.add(username);
-            log.info("User Connected: {}", username);
-            // Broadcast the updated list to everyone subscribed
+            log.info("User Connected to Socket: {}", username);
+
             messagingTemplate.convertAndSend("/topic/public/presence", onlineUsers);
         }
     }

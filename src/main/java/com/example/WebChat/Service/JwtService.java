@@ -6,6 +6,8 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -28,10 +30,15 @@ import java.util.function.Function;
  *     <li>Token validation (signature, expiration, subject match)</li>
  * </ul>
  */
+@Slf4j
 @Service
 public class JwtService {
-    private static final String SECRET_KEY =
-            "3f8e6c4b3a2d1f9e7c5b4a39281726354455464758696a6b7c8d9eafb0c1d2e3";
+
+    @Value("${application.security.jwt.secret-key}")
+    private String SECRET_KEY; // Όχι static, όχι final
+
+//    private final String SECRET_KEY =
+//            "3f8e6c4b3a2d1f9e7c5b4a39281726354455464758696a6b7c8d9eafb0c1d2e3";
 
     // ───────────────────────────────────────────────────────
     // CLAIM EXTRACTION METHODS
@@ -103,6 +110,7 @@ public class JwtService {
      * Generates a JWT for the given user with default settings:
      */
     public String generateToken(UserDetails userDetails) {
+        log.info("Generating new Token!");
         return generateToken(Map.of(), userDetails);
     }
 

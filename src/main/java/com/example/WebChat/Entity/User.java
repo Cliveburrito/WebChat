@@ -32,4 +32,7 @@ public class User {
     private Instant lastSeenAt;
 
     private String avatarUrl;
+
+    @Column(nullable = false)
+    private boolean stealthMode = false;
 }

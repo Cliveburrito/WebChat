@@ -1,7 +1,9 @@
 package com.example.WebChat.Service;
 
+import com.example.WebChat.DTO.CachedUser;
 import com.example.WebChat.Repository.UserRepository;
 import lombok.RequiredArgsConstructor; // ← Lombok auto-generates constructor (no boilerplate!)
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -16,35 +18,25 @@ import org.springframework.stereotype.Service;
  *    - Verify the password (by comparing hashes),
  *    - Authorize roles/permissions later (e.g., in @PreAuthorize).
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
     private final UserRepository userRepository;
 
-    /**
-     * Called automatically by Spring Security during authentication
-     *  IMPORTANT: This method:
-     * - Must throw UsernameNotFoundException if user doesn’t exist
-     * - Must return a UserDetails — NOT the user  entity directly
-     */
     @Cacheable(value = "users", key = "#username")
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-
-        // Fetch user from DB
+        // This runs ONLY if the cache is empty for this username
         var user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
-        // Convert the entity User to Spring Security's UserDetails
-        // Why? Spring doesn’t know our entity , it only knows UserDetails contract
-        return org.springframework.security.core.userdetails.User
-                .withUsername(user.getUsername())
-                .password(user.getPasswordHash())
-                .authorities("USER")
-                .accountExpired(false)
-                .accountLocked(false)
-                .credentialsExpired(false)
-                .disabled(false)
-                .build();
+        // We capture the data into our Record here
+        return new CachedUser(
+                user.getUsername(),
+                user.getPasswordHash(),
+                user.isStealthMode(),
+                true
+        );
     }
 }

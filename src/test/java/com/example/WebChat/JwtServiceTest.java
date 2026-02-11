@@ -27,8 +27,9 @@ class JwtServiceTest {
         // Manually initialize or use ReflectionTestUtils to set the secret key
         // if it's injected via @Value
         jwtService = new JwtService();
-        ReflectionTestUtils.setField(jwtService, "secretKey", "myVerySecretKeyThatIsAtLeast32CharactersLong");
-        ReflectionTestUtils.setField(jwtService, "jwtExpiration", 3600000L); // 1 hour
+         // secret key toulaxiston 32 pshfia
+        ReflectionTestUtils.setField(jwtService, "SECRET_KEY", "1234567891012344433453567891012345678910123");
+       // ReflectionTestUtils.setField(jwtService, "expiration", 3600000L); // 1 hour
     }
 
     @Test
@@ -47,8 +48,6 @@ class JwtServiceTest {
 
     @Test
     void shouldReturnFalseForExpiredToken() {
-        // You could create a method in your service to generate a token with
-        // a specific expiration for testing purposes.
         String expiredToken = jwtService.generateExpiredToken("Mitsos");
 
         assertThrows(ExpiredJwtException.class, () -> jwtService.extractUsername(expiredToken));

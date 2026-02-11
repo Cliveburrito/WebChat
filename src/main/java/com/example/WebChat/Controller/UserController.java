@@ -1,7 +1,5 @@
 package com.example.WebChat.Controller;
 
-import com.example.WebChat.DTO.LoginUserRequest;
-import com.example.WebChat.DTO.RegisterUserRequest;
 import com.example.WebChat.DTO.UserResponse;
 import com.example.WebChat.Entity.User;
 import com.example.WebChat.Exception.ResourceNotFoundException;
@@ -9,10 +7,11 @@ import com.example.WebChat.Repository.UserRepository;
 import com.example.WebChat.Service.UserService;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/users")
@@ -35,5 +34,14 @@ public class UserController {
         User u = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
         return new UserResponse(u.getId(), u.getUsername(), u.getEmail(), u.getAvatarUrl());
+    }
+
+    @PatchMapping("/me/stealth")
+    public ResponseEntity<Void> updateStealthMode(
+            Principal principal,
+            @RequestParam boolean enabled) {
+
+        userService.toggleStealthMode(principal.getName(), enabled);
+        return ResponseEntity.ok().build();
     }
 }

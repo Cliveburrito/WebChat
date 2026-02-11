@@ -18,6 +18,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import com.example.WebChat.Repository.UserRepository;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.test.context.support.WithMockUser;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +34,8 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class MessageServiceTest {
+    @Mock
+    private ConversationRepository conversationRepository;
 
     @Mock
     private MessageRepository messageRepository;
@@ -36,7 +43,7 @@ class MessageServiceTest {
     @InjectMocks
     private MessageService messageService;
 
-    @Mock private ConversationRepository conversationRepository;
+
     @Mock private UserRepository userRepository;
     @Mock private ConvMembershipRepository convMembershipRepository;
     @Mock private RateLimiterService rateLimiter;
@@ -45,56 +52,52 @@ class MessageServiceTest {
 
     @Test
     void shouldSaveMessageSuccessfully() {
-        // 1. Arrange
+        // Arrange
         Message msg = Message.builder().message("Hello").build();
         when(messageRepository.save(any())).thenReturn(msg);
 
-        // 2. Act
+        // Act
         Message saved = messageService.saveMessage(msg);
 
-        // 3. Assert
+        // Assert
         assertNotNull(saved);
         assertEquals("Hello", saved.getMessage());
         verify(messageRepository, times(1)).save(any());
     }
 
     @Test
-    void shouldReturnMappedChatMessageResponsePage() {
-        //  Arrange
+    void shouldReturnChatHistoryDirectlyFromRepo() {
+        // 1. Arrange
         Long convId = 1L;
+        String username = "Mitsos";
         Pageable pageable = PageRequest.of(0, 10);
 
-        // Fake Sender
-        User sender = User.builder().username("Mitsos").build();
+        // 2. Χειροκίνητο SecurityContext (απαραίτητο για Unit Tests)
+        Authentication auth = new UsernamePasswordAuthenticationToken(username, null);
+        SecurityContextHolder.getContext().setAuthentication(auth);
 
-        // Fake Message
-        Message msg = new Message();
-        msg.setMessage("Hello world!");
-        msg.setSentAt(Instant.now());
-        msg.setSender(sender);
+        // 3. Stub το membership check (για να μην πετάξει AccessDeniedException)
+        when(convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(username, convId))
+                .thenReturn(true);
 
-        // Wrap the message in a page
-        Page<Message> mockPage = new PageImpl<>(List.of(msg), pageable, 1);
+        // 4. Mock το repository call
+        ChatMessageResponse dto = new ChatMessageResponse("Hello world!", Instant.now(), username, convId);
+        Page<ChatMessageResponse> mockPage = new PageImpl<>(List.of(dto), pageable, 1);
 
-        // Mock repository behavior
-        when(messageRepository.findByConversationIdWithSender(eq(convId), eq(pageable)))
+        when(messageRepository.findByConversationIdOptimized(convId, pageable))
                 .thenReturn(mockPage);
 
-        // Call the method
+        // 5. Act
         Page<ChatMessageResponse> result = messageService.getChatHistory(convId, pageable);
 
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-        assertEquals("Mitsos", result.getContent().getFirst().senderUsername());
-        assertEquals("Hello world!", result.getContent().getFirst().content());
-
-        verify(messageRepository, times(1)).findByConversationIdWithSender(convId, pageable);
+        // 6. Assert
+        assertEquals(username, result.getContent().get(0).senderUsername());
+        verify(messageRepository).findByConversationIdOptimized(convId, pageable);
     }
 
     @Test
     void shouldProcessAndSendMessageSuccessfully() {
-        // 1. Arrange
+        // Arrange
         String username = "Mitsos";
         Long convId = 1L;
         String content = "Hello!";
@@ -107,17 +110,17 @@ class MessageServiceTest {
         when(bucket.tryConsume(1)).thenReturn(true); // Rate limit allows it
         when(convMembershipRepository.findUsernamesByConversationId(convId)).thenReturn(List.of("Mitsos", "Xenia"));
 
-        // 2. Act
+        // Act
         ChatMessageResponse result = messageService.processAndSend(username, convId, content);
 
-        // 3. Assert
+        // Assert
         assertNotNull(result);
         assertEquals(content, result.content());
 
         // VERIFY: Did we broadcast to the main chat topic?
         verify(messagingTemplate).convertAndSend(eq("/topic/chat/" + convId), any(ChatMessageResponse.class));
 
-        // VERIFY: Did we send 2 notifications (one for Mitsos, one for Xenia)?
+        // VERIFY: Did we send 2 notifications ,one for mitsos, one for xenia?
         verify(messagingTemplate, times(2)).convertAndSend(startsWith("/topic/notifications/"), any(ChatMessageResponse.class));
 
         // VERIFY: Did we increment unread counts?

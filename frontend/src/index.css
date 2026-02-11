@@ -25,6 +25,19 @@
   --msg-other: #202c33;
 }
 
+.chat-header {
+  height: 60px;
+  background: var(--bg-header);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-main);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05); /* Δίνει βάθος */
+}
+
 .chat-empty-state {
   flex: 1;
   display: flex;

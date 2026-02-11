@@ -6,8 +6,12 @@ import com.example.WebChat.DTO.OpenDirectChatRequest;
 import com.example.WebChat.DTO.OpenGroupChatRequest;
 import com.example.WebChat.Entity.Conversation;
 import com.example.WebChat.Service.ConversationService;
+import com.example.WebChat.Service.MessageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.security.Principal;
@@ -19,6 +23,7 @@ import java.util.List;
 public class ConversationController {
 
     private final ConversationService conversationService;
+    private final MessageService messageService;
 
     /**
      * Creates or retrieves a direct conversation between two users.
@@ -56,16 +61,11 @@ public class ConversationController {
      */
     @GetMapping("/{conversationId}/messages")
     public ResponseEntity<Page<ChatMessageResponse>> getConversationMessages(
-            Principal principal,
             @PathVariable Long conversationId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @PageableDefault(size = 20, sort = "sentAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        Page<ChatMessageResponse> response = conversationService.getMessagesByConversationId(
-                conversationId, principal.getName(), page, size
-        );
-
-        return ResponseEntity.ok(response);
+        // Still use the MessageService - it has the optimized JOIN query!
+        return ResponseEntity.ok(messageService.getChatHistory(conversationId, pageable));
     }
 
     /**
@@ -77,4 +77,11 @@ public class ConversationController {
         conversationService.markAsRead(id, principal.getName());
         return ResponseEntity.ok().build();
     }
+
+    @PatchMapping("/{id}/mute")
+    public ResponseEntity<?> mute(@PathVariable Long id, @RequestParam boolean status, Principal principal) {
+        conversationService.toggleMute(principal.getName(), id, status);
+        return ResponseEntity.ok().build();
+    }
+
 }

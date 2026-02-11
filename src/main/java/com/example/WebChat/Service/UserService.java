@@ -1,5 +1,6 @@
 package com.example.WebChat.Service;
 
+import com.example.WebChat.Controller.PresenceEventListener;
 import com.example.WebChat.DTO.*;
 import com.example.WebChat.Entity.User;
 import com.example.WebChat.Exception.EmailAlreadyExistsException;
@@ -7,13 +8,15 @@ import com.example.WebChat.Exception.RateLimitExceededException;
 import com.example.WebChat.Exception.UserAlreadyExistsException;
 import com.example.WebChat.Repository.UserRepository;
 import io.github.bucket4j.Bucket;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
@@ -27,12 +30,13 @@ public class UserService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final RateLimiterService rateLimiter;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public JwtAuthenticationResponse register(RegisterUserRequest request, String ipAddress) {
         Bucket bucket = rateLimiter.resolveAuthBucket(ipAddress);
 
         if(!bucket.tryConsume(1)) {
-            log.warn("Too many attempts from ip: {}", ipAddress);
+            log.warn("Too many register attempts from ip: {}", ipAddress);
             throw new RateLimitExceededException("Too many requests. Please try again in a bit.");
         }
         if (userRepository.existsByUsername(request.username())) {
@@ -68,23 +72,24 @@ public class UserService {
         return new JwtAuthenticationResponse(token, userResponse);
     }
 
+
     public JwtAuthenticationResponse login(LoginUserRequest request, String ipAddress) {
         Bucket bucket = rateLimiter.resolveAuthBucket(ipAddress);
-
         if (!bucket.tryConsume(1)) {
-            log.warn("Too many attempts from ip: {}", ipAddress);
-            throw new RateLimitExceededException("Too many requests. Please try again in a bit.");
+            log.warn("Too many login attempts from ip: {}", ipAddress);
+            throw new RateLimitExceededException("Too many requests.");
         }
 
-        // We let the authentication Manager check the password
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.username(),
-                        request.password()
-                )
+        // Authenticate - This calls loadUserByUsername and puts CachedUser in the result
+        var authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.username(), request.password())
         );
         log.info("Authentication successful");
 
+        // Get the UserDetails directly from the authentication result
+        var userDetails = (org.springframework.security.core.userdetails.UserDetails) authentication.getPrincipal();
+
+        // Fetch the entity for the UserResponse (Non-security data)
         User user = userRepository.findByUsername(request.username())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username"));
 
@@ -95,15 +100,34 @@ public class UserService {
                 user.getAvatarUrl()
         );
 
-        var userDetails = org.springframework.security.core.userdetails.User
-                .withUsername(user.getUsername())
-                .password(user.getPasswordHash())
-                .authorities("USER")
-                .build();
-
+        // Generate token using the userDetails we got from the Manager
         String jwtToken = jwtService.generateToken(userDetails);
         log.info("JWT token issued successfully for user: {}", user.getUsername());
 
         return new JwtAuthenticationResponse(jwtToken, userResponse);
     }
+
+    @Transactional
+    @CacheEvict(value = "users", key = "#username")
+    public void toggleStealthMode(String username, boolean enabled) {
+        // 1. Ενημέρωση Βάσης (Αυτό το είχες)
+        userRepository.updateStealthMode(username, enabled);
+
+        // 2. Ενημέρωση της Live λίστας (Αυτό έλειπε!)
+        if (enabled) {
+            // Αν μπήκε σε Stealth -> Τον βγάζουμε από τη λίστα Online
+            PresenceEventListener.getOnlineUsers().remove(username);
+            log.info("User {} went into Stealth Mode (Hidden)", username);
+        } else {
+            // Αν βγήκε από Stealth -> Τον ξαναβάζουμε στη λίστα
+            PresenceEventListener.getOnlineUsers().add(username);
+            log.info("User {} is now Visible", username);
+        }
+
+        // 3. Ειδοποίηση ΟΛΩΝ των χρηστών (Broadcast)
+        // Στέλνουμε τη νέα λίστα σε όλους ώστε να σβήσει το λαμπάκι αμέσως
+        messagingTemplate.convertAndSend("/topic/public/presence", PresenceEventListener.getOnlineUsers());
+    }
 }
+
+

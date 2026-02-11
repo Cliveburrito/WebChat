@@ -8,4 +8,5 @@ public interface ChatListRow {
     String getLastContent();
     Instant getLastMessageAt();
     Integer getUnreadCount();
+    Boolean getMuted();
 }

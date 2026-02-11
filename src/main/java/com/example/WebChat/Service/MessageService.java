@@ -10,18 +10,21 @@ import com.example.WebChat.Repository.ConvMembershipRepository;
 import com.example.WebChat.Repository.ConversationRepository;
 import com.example.WebChat.Repository.MessageRepository;
 import com.example.WebChat.Repository.UserRepository;
+import com.example.WebChat.UtilsConfigs.RabbitMQConfig;
 import io.github.bucket4j.Bucket;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
-import java.util.List;
 
 
 @Slf4j
@@ -34,6 +37,7 @@ public class MessageService {
     private final ConvMembershipRepository convMembershipRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final RateLimiterService rateLimiter;
+    private final RabbitTemplate rabbitTemplate;
 
     public Message create(User user, Conversation conversation, String content) {
         Message message = Message.builder()
@@ -67,34 +71,22 @@ public class MessageService {
             throw new RateLimitExceededException("Too many messages!");
         }
 
-        Message msg = Message.builder()
-                .message(content)
-                .sender(user)
-                .conversation(conversation)
-                .sentAt(Instant.now())
-                .build();
-
-        saveMessage(msg);
-
         ChatMessageResponse dto = new ChatMessageResponse(
-                msg.getMessage(),
-                msg.getSentAt(),
-                user.getUsername(),
+                content,
+                Instant.now(),
+                username,
                 conversationId
         );
-        // the frontend doesn't subscribe to this topic, but we are keeping it
+
         messagingTemplate.convertAndSend("/topic/chat/" + conversationId, dto);
 
-        // unread + notifications
-        List<String> memberUsernames = convMembershipRepository.findUsernamesByConversationId(conversationId);
+        rabbitTemplate.convertAndSend(
+                RabbitMQConfig.CHAT_EXCHANGE,
+                RabbitMQConfig.CHAT_ROUTING_KEY,
+                dto
+        );
 
-        for (String recipient : memberUsernames) {
-            messagingTemplate.convertAndSend("/topic/notifications/" + recipient, dto);
-        }
-
-        convMembershipRepository.incrementUnreadCountForOthers(conversationId, user.getId());
-
-        log.info("Broadcasting message from {} to conversation {}", username, conversationId);
+        log.info("Message sent to RabbitMQ for async processing: {}", conversationId);
 
         return dto;
     }
@@ -119,19 +111,21 @@ public class MessageService {
 
     /**
      * Retrieves the history of messages for a conversation.
-     * Note: For security, you should also verify membership here if calling from a generic controller.
+     * also for security I verify membership here if calling from a generic controller.
      */
     public Page<ChatMessageResponse> getChatHistory(Long conversationId, Pageable pageable) {
-        // Fetch EVERYTHING in one query
-        Page<Message> messages = messageRepository.findByConversationIdWithSender(conversationId, pageable);
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        // Map to DTO (The sender data is already in memory!)
-        return messages.map(m -> new ChatMessageResponse(
-                m.getMessage(),
-                m.getSentAt(),
-                m.getSender().getUsername(),
-                conversationId
-        ));
+        boolean isMember = convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(
+                currentUsername, conversationId);
+
+        if (!isMember) {
+            throw new AccessDeniedException("You are not a member of this conversation.");
+        }
+
+        // Fetch EVERYTHING in one query
+        return messageRepository.findByConversationIdOptimized(conversationId, pageable);
+
     }
 
     public Message saveMessage(Message message) {
