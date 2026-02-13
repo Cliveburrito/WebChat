@@ -21,12 +21,13 @@ public record ChatMessageResponse(
 
     public static ChatMessageResponse fromEntity(Message message) {
         return new ChatMessageResponse(
-                message.getMessage(),
+                // Βεβαιώσου ότι το όνομα του πεδίου είναι "content" για να ταιριάζει με το JSON σου
+                message.getMessage() != null ? message.getMessage() : "",
                 message.getSentAt(),
                 message.getSender().getUsername(),
                 message.getConversation().getConversationID(),
-                // Map the attachments list to DTOs
-                message.getAttachments().stream()
+                // ✅ ΕΔΩ ΓΙΝΕΤΑΙ Η ΜΕΤΑΤΡΟΠΗ
+                message.getAttachments() == null ? List.of() : message.getAttachments().stream()
                         .map(AttachmentDTO::fromEntity)
                         .toList()
         );

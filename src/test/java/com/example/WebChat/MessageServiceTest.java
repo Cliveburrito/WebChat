@@ -2,6 +2,7 @@ package com.example.WebChat;
 
 import com.example.WebChat.DTO.ChatMessageEvent;
 import com.example.WebChat.DTO.ChatMessageResponse;
+import com.example.WebChat.Entity.Conversation;
 import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Entity.User;
 import com.example.WebChat.Repository.*;
@@ -138,8 +139,15 @@ class MessageServiceTest {
         when(listOps.range("chat:history:" + convId, 0, size - 1)).thenReturn(List.of());
 
         // Mock DB Response
+        User user = User.builder().username("Mitsos").email("G@m.com").id(1L).build();
+        Conversation conv = Conversation.builder().conversationID(1L).build();
+        Message entity = new Message();
+        entity.setMessage("Hello world!");
+        entity.setSentAt(Instant.now());
+        entity.setSender(user);
+        entity.setConversation(conv);
         ChatMessageResponse dto = new ChatMessageResponse("Hello world!", Instant.now(), username, convId, List.of());
-        Slice<ChatMessageResponse> mockSlice = new SliceImpl<>(List.of(dto), pageable, false);
+        Slice<Message> mockSlice = new SliceImpl<>(List.of(entity), pageable, false);
 
         when(messageRepository.findByConversationIdOptimized(convId, pageable)).thenReturn(mockSlice);
 

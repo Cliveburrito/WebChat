@@ -96,7 +96,7 @@ public class MessageService {
         log.info("Message handoff to RabbitMQ: tempId={}", tempId);
     }
 
-
+    @Transactional
     public List<ChatMessageResponse> getChatHistory(Long conversationId, int page, int size) {
         String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
 
@@ -105,24 +105,28 @@ public class MessageService {
             throw new AccessDeniedException("Access Denied");
         }
 
-        // 2. Page 0 = The "Hot" Page (Try Redis)
-        if (page == 0) {
-            String historyKey = "chat:history:" + conversationId;
-            List<String> cached = redisTemplate.opsForList().range(historyKey, 0, size - 1);
-
-            if (cached != null && !cached.isEmpty()) {
-                log.info("Redis Hit for Page 0 - Conv {}", conversationId);
-                return cached.stream()
-                        .map(this::deserialize)
-                        .toList();
-            }
-        }
+//        // 2. Page 0 = The "Hot" Page (Try Redis)
+//        if (page == 0) {
+//            String historyKey = "chat:history:" + conversationId;
+//            List<String> cached = redisTemplate.opsForList().range(historyKey, 0, size - 1);
+//
+//            if (cached != null && !cached.isEmpty()) {
+//                log.info("Redis Hit for Page 0 - Conv {}", conversationId);
+//                return cached.stream()
+//                        .map(this::deserialize)
+//                        .toList();
+//            }
+//        }
 
         // 3. Older Pages or Redis Miss = The "Cold" Storage (Postgres)
         log.info("Postgres Read for Page {} - Conv {}", page, conversationId);
         Pageable pageable = PageRequest.of(page, size, Sort.by("sentAt").descending());
 
-        return messageRepository.findByConversationIdOptimized(conversationId, pageable).getContent();
+        return messageRepository.findByConversationIdOptimized(conversationId, pageable)
+                .getContent()
+                .stream()
+                .map(ChatMessageResponse::fromEntity)
+                .toList();
     }
 
     public Message saveMessage(Message message) {

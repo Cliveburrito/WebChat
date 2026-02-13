@@ -39,23 +39,27 @@ public class ChatMessageConsumer {
     public void handleMessageProcessing(ChatMessageEvent event) { // Changed to Event
         log.info("Processing message from RabbitMQ: tempId={}", event.tempId());
 
+        User sender = userRepository.findByUsername(event.senderName())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // Use getReferenceById to avoid a heavy SELECT query
+        Conversation conv = conversationRepository.getReferenceById(event.conversationId());
+
+        Message msg = Message.builder()
+                .message(event.content())
+                .sender(sender)
+                .conversation(conv)
+                .sentAt(event.sentAt())
+                .build();
+
+        // This generates the real database ID
+        messageRepository.save(msg);
+
+        // Keep unread counters in the critical path so offline users don't lose badges.
+        convMembershipRepository.incrementUnreadCountForOthers(event.conversationId(), sender.getId());
+
+        // Best-effort cache updates.
         try {
-            User sender = userRepository.findByUsername(event.senderName())
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-            // Use getReferenceById to avoid a heavy SELECT query
-            Conversation conv = conversationRepository.getReferenceById(event.conversationId());
-
-            Message msg = Message.builder()
-                    .message(event.content())
-                    .sender(sender)
-                    .conversation(conv)
-                    .sentAt(event.sentAt())
-                    .build();
-
-            // This generates the real database ID
-            messageRepository.save(msg);
-
             // --- REDIS: Update Chat History (Sliding Window) ---
             String historyKey = "chat:history:" + event.conversationId();
             ChatMessageResponse response = ChatMessageResponse.fromEntity(msg);
@@ -67,28 +71,23 @@ public class ChatMessageConsumer {
             redisTemplate.expire(historyKey, Duration.ofDays(7));
 
             // --- REDIS: Update Sidebar Metadata (Hash) ---
-            // This makes the 'getUserChats' incredibly fast later
             String metaKey = "conv:meta:" + event.conversationId();
             redisTemplate.opsForHash().put(metaKey, "lastContent", event.content());
             redisTemplate.opsForHash().put(metaKey, "lastMessageAt", event.sentAt().toString());
-
-            // Notify the frontend: "tempId abc is now real ID 123"
-            // This is crucial for the asynchronous file linking later!
-            MessageConfirmation confirmation = new MessageConfirmation(
-                    event.tempId(),
-                    msg.getId(),
-                    "PERSISTED"
-            );
-            messagingTemplate.convertAndSend("/topic/chat/" + event.conversationId(), confirmation);
-
-            // Unread count and notifications
-            convMembershipRepository.incrementUnreadCountForOthers(event.conversationId(), sender.getId());
-
-            log.info("Message saved with ID: {}", msg.getId());
-
         } catch (Exception e) {
-            log.error("Failed to process message from RabbitMQ", e);
+            log.warn("Redis update failed for conversation {}", event.conversationId(), e);
         }
+
+        // Notify the frontend: "tempId abc is now real ID 123"
+        // This is crucial for the asynchronous file linking later.
+        MessageConfirmation confirmation = new MessageConfirmation(
+                event.tempId(),
+                msg.getId(),
+                "PERSISTED"
+        );
+        messagingTemplate.convertAndSend("/topic/chat/" + event.conversationId(), confirmation);
+
+        log.info("Message saved with ID: {}", msg.getId());
     }
 
     @RabbitListener(queues = RabbitMQConfig.FILE_LINK_QUEUE)
@@ -97,10 +96,10 @@ public class ChatMessageConsumer {
         log.info("Linking {} files to message ID {}", task.storageNames().size(), task.messageId());
 
         try {
-            // Get a reference to the message just saved above
+            // 1. Get a reference to the message
             Message message = messageRepository.getReferenceById(task.messageId());
 
-            //  Create Attachment entities for each file on my disk
+            // 2. Create and Save Attachment entities
             List<Attachment> attachments = new java.util.ArrayList<>();
             for (int i = 0; i < task.storageNames().size(); i++) {
                 attachments.add(Attachment.builder()
@@ -113,7 +112,14 @@ public class ChatMessageConsumer {
             }
             attachmentRepository.saveAll(attachments);
 
-            // Broadcast the event to the chat
+            // --- 🚀 ΤΟ BEAST FIX ΓΙΑ ΤΟ CACHE ---
+            // Διαγράφουμε το cache του ιστορικού γιατί τώρα το μήνυμα "άλλαξε" (απέκτησε αρχεία)
+            String historyKey = "chat:history:" + task.conversationId();
+            redisTemplate.delete(historyKey);
+            log.info("Invalidated Redis cache for conversation {}", task.conversationId());
+            // ------------------------------------
+
+            // 3. Broadcast the event to the chat (Live update)
             List<AttachmentDTO> dtos = attachments.stream().map(AttachmentDTO::fromEntity).toList();
             AttachmentLinkedEvent linkedEvent = new AttachmentLinkedEvent(task.messageId(), task.conversationId(), dtos);
 

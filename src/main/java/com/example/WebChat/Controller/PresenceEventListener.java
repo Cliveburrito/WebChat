@@ -27,6 +27,12 @@ public class PresenceEventListener {
         if (sha.getUser() != null) {
             presenceService.onConnect(sha.getUser().getName());
         }
+
+        messagingTemplate.convertAndSendToUser(
+                sha.getUser().getName(),
+                "/topic/public/presence",
+                presenceService.getOnlineUsers()
+        );
     }
 
     @EventListener

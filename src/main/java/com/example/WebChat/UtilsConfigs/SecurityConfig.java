@@ -57,9 +57,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/favicon.ico",
-                           "/actuator/**",
+                                "/actuator/**",
                                 "/api/auth/**",
-                                "/ws/**"
+                                "/ws/**",
+                                "/api/files/download/**"
                         ).permitAll()
                         // All other routes require authentication
                         .anyRequest().authenticated()

@@ -8,6 +8,7 @@ import com.example.WebChat.Entity.Attachment;
  */
 public record AttachmentDTO(
         Integer id,
+        String storageName,
         String originalName,
         String contentType,
         Long fileSize,
@@ -20,6 +21,7 @@ public record AttachmentDTO(
     public static AttachmentDTO fromEntity(Attachment attachment) {
         return new AttachmentDTO(
                 attachment.getId(),
+                attachment.getStorageName(),
                 attachment.getOriginalName(),
                 attachment.getContentType(),
                 attachment.getFileSize(),

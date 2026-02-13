@@ -57,6 +57,7 @@ public class Message {
     @JoinColumn(name = "conversation_id", nullable = false)
     private Conversation conversation;
 
-    @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "message", cascade = CascadeType.ALL)
+    @org.hibernate.annotations.BatchSize(size = 20) // <--- ΠΡΟΣΘΕΣΕ ΑΥΤΟ
     private List<Attachment> attachments = new ArrayList<>();
 }

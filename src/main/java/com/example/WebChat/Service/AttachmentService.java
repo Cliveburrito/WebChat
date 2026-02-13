@@ -31,7 +31,7 @@ public class AttachmentService {
 
 
     public AttachmentDTO getMetadataByStorageName(String storageName) {
-        return attachmentRepository.findByStorageName(storageName)
+        return attachmentRepository.findByStorageNameWithUploader(storageName)
                 .map(AttachmentDTO::fromEntity)
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment with storage name " + storageName + " not found"));
     }

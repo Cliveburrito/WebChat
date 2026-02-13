@@ -2,6 +2,10 @@ spring:
   application:
     name: WebChat
 
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 15MB
   # Database Configuration (PostgreSQL)
   # The host defaults to 'localhost' for local IDE runs,
   # but can be overridden by 'db' when running in Docker.
