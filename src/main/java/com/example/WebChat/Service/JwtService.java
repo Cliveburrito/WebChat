@@ -1,5 +1,6 @@
 package com.example.WebChat.Service;
 
+import com.example.WebChat.UtilsConfigs.AppProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -7,7 +8,6 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -34,11 +34,14 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    @Value("${application.security.jwt.secret-key}")
-    private String SECRET_KEY; // Όχι static, όχι final
+    private final String SECRET_KEY;
+    private final long EXPIRATION_MS;
 
-//    private final String SECRET_KEY =
-//            "3f8e6c4b3a2d1f9e7c5b4a39281726354455464758696a6b7c8d9eafb0c1d2e3";
+
+    public JwtService(AppProperties appProperties) {
+        this.SECRET_KEY = appProperties.getSecurity().getJwtSecret();
+        this.EXPIRATION_MS = appProperties.getSecurity().getJwtExpirationMs();
+    }
 
     // ───────────────────────────────────────────────────────
     // CLAIM EXTRACTION METHODS
@@ -126,7 +129,7 @@ public class JwtService {
                 .setClaims(extraClaims)                         // Custom claims (e.g. "roles": ["USER"])
                 .setSubject(userDetails.getUsername())         // Standard "sub" claim
                 .setIssuedAt(new Date(now))                    // "iat" — time of issue
-                .setExpiration(new Date(now + 1000L * 60 * 60 * 24)) // "exp" — expires in 24 hours
+                .setExpiration(new Date(now + EXPIRATION_MS))  // "exp" — expires based on config
                 .signWith(getSignInKey(), SignatureAlgorithm.HS256)  // Sign with HMAC-SHA256
                 .compact();                                    // Serialize to compact JWT string
     }

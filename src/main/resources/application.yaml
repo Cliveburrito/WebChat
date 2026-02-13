@@ -59,7 +59,11 @@ management:
 # Custom Application Security Settings
 application:
   security:
-    jwt:
-      # HS512 requires a 64-character (512-bit) secret key
-      secret-key: "6b7c8d9eafb0c1d2e33f8e6c4b3a2d1f9e7c5233sab4a39281726354455464758696a"
-      #expiration: 86400000 # 24 hours in milliseconds
+    # HS512 requires a 64-character (512-bit) secret key
+    jwt-secret: ${JWT_SECRET:6b7c8d9eafb0c1d2e33f8e6c4b3a2d1f9e7c5233sab4a39281726354455464758696a}
+    jwt-expiration-ms: 86400000
+
+  storage:
+    location: ${STORAGE_PATH:uploads}
+    max-file-size: 15728640 # 15MB in bytes
+

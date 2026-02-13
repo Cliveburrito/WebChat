@@ -1,13 +1,10 @@
 package com.example.WebChat.Controller;
 
+import com.example.WebChat.DTO.ChatMessageRequest;
 import com.example.WebChat.DTO.ChatMessageResponse;
 import com.example.WebChat.Service.MessageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -17,6 +14,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.List;
 
 @Slf4j
 @Controller // Use @Controller for hybrid classes
@@ -37,7 +35,7 @@ public class ChatController {
     public void handleWebSocketMessage(
             Principal principal,
             @DestinationVariable Long conversationId,
-            @Payload String content
+            @Payload ChatMessageRequest request // Changed from String to DTO
     ) {
         // Fallback for security, principal should not be null if configured correctly
         String username = (principal != null) ? principal.getName() : "anonymous";
@@ -45,7 +43,7 @@ public class ChatController {
         log.info("Received WebSocket message for conversation {}: from user {}", conversationId, username);
 
         // This saves the message and broadcasts it back to /topic/chat/{conversationId}
-        messageService.processAndSend(username, conversationId, content);
+        messageService.processAndSend(username, conversationId, request.content(), request.tempId());
     }
 
     /**
@@ -63,32 +61,33 @@ public class ChatController {
     /**
      * This is what my frontend currently uses to send a message, this endpoint not the socket
      */
-    @PostMapping("/api/messages/chat/{id}/smsg") // Move full path here
-    @ResponseBody // Required since we removed @RestController
-    public ResponseEntity<ChatMessageResponse> sendMessage(
+    @PostMapping("/api/messages/chat/{id}/smsg")
+    public ResponseEntity<Void> sendMessage(
             Principal principal,
             @PathVariable Long id,
-            @RequestBody ChatMessageResponse body
+            @RequestBody ChatMessageRequest body // Use the Request DTO (content + tempId)
     ) {
-        ChatMessageResponse saved = messageService.processAndSend(principal.getName(), id, body.content());
-        return ResponseEntity.ok(saved);
+        // Kick off the Async flow
+        messageService.processAndSend(principal.getName(), id, body.content(), body.tempId());
+
+        // Return 202 Accepted (Standard for "We're working on it")
+        return ResponseEntity.accepted().build();
     }
 
 
     /**
      * rest endpoint that retrieves message history for a specific conversation.
      */
-    @GetMapping("/history/{conversationId}")
-    public ResponseEntity<Page<ChatMessageResponse>> getChatHistory(
-            Principal principal,
-            @PathVariable Long conversationId,
-            @PageableDefault(size = 20, sort = "sentAt", direction = Sort.Direction.DESC) Pageable pageable
-    ) {
-        String username = principal.getName();
-        log.info("User {} requesting history for conversation {}", username, conversationId);
-
-        // Change the service call to accept pageable
-        Page<ChatMessageResponse> history = messageService.getChatHistory(conversationId, pageable);
-        return ResponseEntity.ok(history);
-    }
+//    @GetMapping("/{conversationId}/history")
+//    public ResponseEntity<List<ChatMessageResponse>> getChatHistory(
+//            @PathVariable Long conversationId,
+//            @RequestParam(defaultValue = "0") int page,
+//            @RequestParam(defaultValue = "20") int size,
+//            Principal principal) {
+//
+//        // The service handles the SecurityContext internally, so we don't need Principal here
+//        List<ChatMessageResponse> history = messageService.getChatHistory(conversationId, page, size);
+//        log.info("Use {} requests chat history for conversation with id: {}", principal.getName() , conversationId);
+//        return ResponseEntity.ok(history);
+//    }
 }

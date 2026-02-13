@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service;
 public class CustomUserDetailsService implements UserDetailsService {
     private final UserRepository userRepository;
 
-    @Cacheable(value = "users", key = "#username")
+    @Cacheable(value = "user_details", key = "#username")
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         // This runs ONLY if the cache is empty for this username

@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 export function useChatSocket({ token, username, onNotification, onPresenceUpdate }) {
     const [stompClient, setStompClient] = useState(null);
-    const [onlineUsers, setOnlineUsers] = useState([]); // Local state for presence
+    const [onlineUsers, setOnlineUsers] = useState([]);
 
-    // Use Refs to keep callbacks current without triggering useEffect loops
     const onNotificationRef = useRef(onNotification);
     const onPresenceUpdateRef = useRef(onPresenceUpdate);
 
@@ -19,6 +18,7 @@ export function useChatSocket({ token, username, onNotification, onPresenceUpdat
         if (!token || !username) return;
 
         let isCancelled = false;
+        let heartbeatInterval = null; // Reference for cleanup
         const socketUrl = "http://localhost:8080/ws";
 
         const client = new Client({
@@ -34,7 +34,16 @@ export function useChatSocket({ token, username, onNotification, onPresenceUpdat
                 setStompClient(client);
                 console.log("Connected to STOMP as", username);
 
-                // 1. Subscribe to Personal Notifications
+                // --- START HEARTBEAT LOGIC ---
+                // Send a pulse every 45 seconds to keep the Redis key alive (TTL 120s)
+                heartbeatInterval = setInterval(() => {
+                    if (client.connected) {
+                        client.publish({ destination: "/app/presence/heartbeat" });
+                        console.debug("Heartbeat pulse sent");
+                    }
+                }, 45000);
+
+                // Subscribe to Personal Notifications
                 client.subscribe(`/topic/notifications/${username}`, (frame) => {
                     try {
                         const dto = JSON.parse(frame.body);
@@ -44,24 +53,25 @@ export function useChatSocket({ token, username, onNotification, onPresenceUpdat
                     }
                 });
 
-                // 2. Subscribe to Global Presence
+                // Subscribe to Global Presence Updates
                 client.subscribe(`/topic/public/presence`, (frame) => {
                     try {
                         const onlineList = JSON.parse(frame.body);
-                        setOnlineUsers(onlineList); // Update local state
-                        onPresenceUpdateRef.current?.(onlineList); // Call parent if needed
+                        setOnlineUsers(onlineList);
+                        onPresenceUpdateRef.current?.(onlineList);
                     } catch (e) {
                         console.error("Bad Presence payload:", e);
                     }
                 });
 
+                // Subscribe to Personal Presence Sync (for initial load)
                 client.subscribe(`/user/topic/public/presence`, (frame) => {
                     const onlineList = JSON.parse(frame.body);
-                    console.log("Sync Presence Received:", onlineList);
                     setOnlineUsers(onlineList);
                     onPresenceUpdateRef.current?.(onlineList);
                 });
 
+                // Initial request for the online users list
                 client.publish({ destination: "/app/presence/sync" });
             },
             onStompError: (frame) => {
@@ -71,6 +81,7 @@ export function useChatSocket({ token, username, onNotification, onPresenceUpdat
                 console.log("WS Connection Closed");
                 setStompClient(null);
                 setOnlineUsers([]);
+                if (heartbeatInterval) clearInterval(heartbeatInterval);
             }
         });
 
@@ -78,6 +89,7 @@ export function useChatSocket({ token, username, onNotification, onPresenceUpdat
 
         return () => {
             isCancelled = true;
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
             if (client) {
                 client.deactivate();
                 setStompClient(null);
@@ -85,6 +97,5 @@ export function useChatSocket({ token, username, onNotification, onPresenceUpdat
         };
     }, [token, username]);
 
-    // Return BOTH the client and the list of online users
     return { stompClient, onlineUsers };
 }

@@ -3,6 +3,8 @@ package com.example.WebChat.Entity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * This class represents a single chat message in the system.
@@ -22,6 +24,7 @@ public class Message {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     // Database will auto-generate the ID (e.g. SERIAL / IDENTITY column)
     private Long id;
+
 
     @Column(nullable = false, length = 500)
     // The actual text content of the message, max 500 characters, cannot be null
@@ -53,4 +56,7 @@ public class Message {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "conversation_id", nullable = false)
     private Conversation conversation;
+
+    @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Attachment> attachments = new ArrayList<>();
 }

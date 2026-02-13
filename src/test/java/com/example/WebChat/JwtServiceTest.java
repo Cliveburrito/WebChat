@@ -1,41 +1,49 @@
 package com.example.WebChat;
 
-
 import com.example.WebChat.Service.JwtService;
+import com.example.WebChat.UtilsConfigs.AppProperties;
 import io.jsonwebtoken.ExpiredJwtException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@ExtendWith(MockitoExtension.class)
 class JwtServiceTest {
-
-    @Mock
-    UserDetails userDetails;
 
     private JwtService jwtService;
 
     @BeforeEach
     void setUp() {
-        // Manually initialize or use ReflectionTestUtils to set the secret key
-        // if it's injected via @Value
-        jwtService = new JwtService();
-         // secret key toulaxiston 32 pshfia
-        ReflectionTestUtils.setField(jwtService, "SECRET_KEY", "1234567891012344433453567891012345678910123");
-       // ReflectionTestUtils.setField(jwtService, "expiration", 3600000L); // 1 hour
+
+        // Δημιουργούμε fake AppProperties
+        AppProperties appProperties = new AppProperties();
+
+        // Βάζουμε VALID Base64 secret (512-bit recommended)
+        String rawSecret = "my-super-secret-key-for-testing-which-is-long-enough-123456";
+        String base64Secret = Base64.getEncoder().encodeToString(rawSecret.getBytes());
+
+        appProperties.getSecurity().setJwtSecret(base64Secret);
+        appProperties.getSecurity().setJwtExpirationMs(3600000L); // 1 hour
+
+        jwtService = new JwtService(appProperties);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
     void shouldGenerateValidToken() {
         String username = "Mitsos";
-        userDetails = User.withUsername(username)
+
+        UserDetails userDetails = User.withUsername(username)
                 .password("121221")
                 .authorities("USER")
                 .build();
@@ -47,19 +55,41 @@ class JwtServiceTest {
     }
 
     @Test
-    void shouldReturnFalseForExpiredToken() {
+    void shouldThrowForExpiredToken() {
         String expiredToken = jwtService.generateExpiredToken("Mitsos");
 
-        assertThrows(ExpiredJwtException.class, () -> jwtService.extractUsername(expiredToken));
+        assertThrows(ExpiredJwtException.class,
+                () -> jwtService.extractUsername(expiredToken));
     }
-
 
     @Test
     void isTokenValid_ShouldReturnTrueForCorrectUser() {
         String username = "Mitsos";
-        UserDetails user = User.withUsername(username).password("p").authorities("U").build();
+
+        UserDetails user = User.withUsername(username)
+                .password("p")
+                .authorities("USER")
+                .build();
+
         String token = jwtService.generateToken(user);
 
         assertTrue(jwtService.isTokenValid(token));
+    }
+
+    @Test
+    void isTokenValid_ShouldReturnFalseForTamperedToken() {
+        String username = "Mitsos";
+
+        UserDetails user = User.withUsername(username)
+                .password("p")
+                .authorities("USER")
+                .build();
+
+        String token = jwtService.generateToken(user);
+
+        // Αλλοιώνουμε το token
+        String tamperedToken = token.substring(0, token.length() - 2) + "aa";
+
+        assertFalse(jwtService.isTokenValid(tamperedToken));
     }
 }

@@ -1,5 +1,9 @@
 package com.example.WebChat.DTO;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
 import java.util.List;
 
 /**
@@ -8,6 +12,11 @@ import java.util.List;
  * and the persons ids that he requests it for, also a group chat must have a name
  */
 public record OpenGroupChatRequest(
-        List<Long> memberIds,
-        String groupName
-){}
+        @NotBlank(message = "Group name is required")
+        @Size(min = 1, max = 50)
+        String groupName,
+
+        @NotNull
+        @Size(min = 2, message = "You must add at least one other member")
+        List<Long> memberIds
+) {}

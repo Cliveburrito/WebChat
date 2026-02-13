@@ -7,11 +7,9 @@ import com.example.WebChat.DTO.OpenGroupChatRequest;
 import com.example.WebChat.Entity.Conversation;
 import com.example.WebChat.Service.ConversationService;
 import com.example.WebChat.Service.MessageService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.security.Principal;
@@ -20,6 +18,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/chats")
 @RequiredArgsConstructor
+@Slf4j
 public class ConversationController {
 
     private final ConversationService conversationService;
@@ -41,8 +40,10 @@ public class ConversationController {
      * Creates a new group conversation.
      */
     @PostMapping("/group")
-    public ResponseEntity<?> createGroup(@RequestBody OpenGroupChatRequest request, Principal principal) {
-        // We pass the creator's username and the request
+    public ResponseEntity<?> createGroup(
+            @Valid @RequestBody OpenGroupChatRequest request,
+            Principal principal) {
+        // We pass the creator's username and request
         Conversation conv = conversationService.createGroupChat(request, principal.getName());
         return ResponseEntity.ok(conv);
     }
@@ -55,18 +56,6 @@ public class ConversationController {
         return ResponseEntity.ok(conversationService.getUserChats(principal.getName()));
     }
 
-    /**
-     * Fetches paginated messages for a specific conversation
-     * Includes a membership security check using the Principal
-     */
-    @GetMapping("/{conversationId}/messages")
-    public ResponseEntity<Page<ChatMessageResponse>> getConversationMessages(
-            @PathVariable Long conversationId,
-            @PageableDefault(size = 20, sort = "sentAt", direction = Sort.Direction.DESC) Pageable pageable) {
-
-        // Still use the MessageService - it has the optimized JOIN query!
-        return ResponseEntity.ok(messageService.getChatHistory(conversationId, pageable));
-    }
 
     /**
      * The endpoint the frontend uses to let the backend know the user has clicked
@@ -82,6 +71,19 @@ public class ConversationController {
     public ResponseEntity<?> mute(@PathVariable Long id, @RequestParam boolean status, Principal principal) {
         conversationService.toggleMute(principal.getName(), id, status);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{conversationId}/messages")
+    public ResponseEntity<List<ChatMessageResponse>> getChatHistory(
+            @PathVariable Long conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Principal principal) {
+
+        // The service handles the SecurityContext internally, so we don't need Principal here
+        List<ChatMessageResponse> history = messageService.getChatHistory(conversationId, page, size);
+        log.info("Use {} requests chat history for conversation with id: {}", principal.getName() , conversationId);
+        return ResponseEntity.ok(history);
     }
 
 }

@@ -5,6 +5,7 @@ import com.example.WebChat.DTO.LoginUserRequest;
 import com.example.WebChat.DTO.RegisterUserRequest;
 import com.example.WebChat.Service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid; // <--- 1. Import this!
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,14 +19,16 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<JwtAuthenticationResponse> register(
-            @RequestBody RegisterUserRequest registerRequest, HttpServletRequest req) {
+            @Valid @RequestBody RegisterUserRequest registerRequest, // <--- 2. Add @Valid here
+            HttpServletRequest req) {
         String ipAddress = req.getRemoteAddr();
         return ResponseEntity.ok(userService.register(registerRequest , ipAddress));
     }
 
     @PostMapping("/login")
     public ResponseEntity<JwtAuthenticationResponse> login(
-            @RequestBody LoginUserRequest loginRequest, HttpServletRequest request) {
+            @Valid @RequestBody LoginUserRequest loginRequest, // <--- 3. Add @Valid here
+            HttpServletRequest request) {
         String ipAddress = request.getRemoteAddr();
         return ResponseEntity.ok(userService.login(loginRequest, ipAddress));
     }

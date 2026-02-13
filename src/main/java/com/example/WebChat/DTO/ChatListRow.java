@@ -9,4 +9,11 @@ public interface ChatListRow {
     Instant getLastMessageAt();
     Integer getUnreadCount();
     Boolean getMuted();
+
+    default String getSidebarSnippet() {
+        if (getLastContent() == null || getLastContent().isBlank()) {
+            return "📷 Attachment sent";
+        }
+        return getLastContent();
+    }
 }

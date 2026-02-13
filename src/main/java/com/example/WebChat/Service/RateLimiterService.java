@@ -32,4 +32,10 @@ public class RateLimiterService {
                         .refillGreedy(5, Duration.ofSeconds(1)))
                 .build());
     }
+
+    public Bucket resolveFileBucket(String username) {
+        return Bucket.builder()
+                .addLimit(limit -> limit.capacity(5).refillGreedy(5, Duration.ofMinutes(1)))
+                .build();
+    }
 }

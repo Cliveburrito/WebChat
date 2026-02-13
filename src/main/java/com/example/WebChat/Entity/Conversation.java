@@ -17,7 +17,8 @@ public class Conversation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long conversationID;                // Unique ID of the conversation
 
-    @Column(nullable = true, length = 100)
+    @Column(length = 100)
+
     private String conversationName;
     // For group chats this can be "Friends", "Work", etc.
     // For 1–1 chats you can keep it null or auto-generate something later.

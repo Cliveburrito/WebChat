@@ -1,5 +1,6 @@
 package com.example.WebChat.Service;
 
+import com.example.WebChat.DTO.ChatMessageEvent;
 import com.example.WebChat.DTO.ChatMessageResponse;
 import com.example.WebChat.Entity.Conversation;
 import com.example.WebChat.Entity.Message;
@@ -7,17 +8,19 @@ import com.example.WebChat.Entity.User;
 import com.example.WebChat.Exception.RateLimitExceededException;
 import com.example.WebChat.Exception.ResourceNotFoundException;
 import com.example.WebChat.Repository.ConvMembershipRepository;
-import com.example.WebChat.Repository.ConversationRepository;
 import com.example.WebChat.Repository.MessageRepository;
 import com.example.WebChat.Repository.UserRepository;
 import com.example.WebChat.UtilsConfigs.RabbitMQConfig;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
@@ -25,6 +28,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
+import java.util.List;
 
 
 @Slf4j
@@ -33,11 +37,12 @@ import java.time.Instant;
 public class MessageService {
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
-    private final ConversationRepository conversationRepository;
     private final ConvMembershipRepository convMembershipRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final RateLimiterService rateLimiter;
     private final RabbitTemplate rabbitTemplate;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     public Message create(User user, Conversation conversation, String content) {
         Message message = Message.builder()
@@ -56,11 +61,9 @@ public class MessageService {
      * Processes a message sent via WebSocket, saves it, and broadcasts it to the subscribers.
      */
     @Transactional
-    public ChatMessageResponse processAndSend(String username, Long conversationId, String content) {
+    public void processAndSend(String username, Long conversationId, String content, String tempId) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
-
-        Conversation conversation = conversationRepository.getReferenceById(conversationId);
 
         boolean isMember = convMembershipRepository.existsByUser_IdAndConversation_ConversationID(user.getId(), conversationId);
         if (!isMember) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a member of this conversation.");
@@ -71,64 +74,67 @@ public class MessageService {
             throw new RateLimitExceededException("Too many messages!");
         }
 
-        ChatMessageResponse dto = new ChatMessageResponse(
+        // 1. Create the lightweight event for the WebSocket
+        ChatMessageEvent event = new ChatMessageEvent(
+                tempId,
                 content,
-                Instant.now(),
                 username,
-                conversationId
+                conversationId,
+                Instant.now()
         );
 
-        messagingTemplate.convertAndSend("/topic/chat/" + conversationId, dto);
+        // 2. Broadcast INSTANTLY via WebSocket (User A and B see the bubble now)
+        messagingTemplate.convertAndSend("/topic/chat/" + conversationId, event);
 
+        // 3. Hand off the "Hard Work" (DB Save) to RabbitMQ
         rabbitTemplate.convertAndSend(
                 RabbitMQConfig.CHAT_EXCHANGE,
                 RabbitMQConfig.CHAT_ROUTING_KEY,
-                dto
+                event // Send the event with tempId so the Consumer knows it
         );
 
-        log.info("Message sent to RabbitMQ for async processing: {}", conversationId);
-
-        return dto;
+        log.info("Message handoff to RabbitMQ: tempId={}", tempId);
     }
 
-    /**
-     * I used that for Postman , although it's useless now basically I'll keep it
-     */
-    public void postMessage(String username, Long conversationId, String content) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User Does NOT FOUND" + username));
-        Conversation conversation = conversationRepository.findByConversationID(conversationId);
 
-        Message message = Message.builder()
-                .conversation(conversation)
-                .sender(user)
-                .sentAt(Instant.now())
-                .message(content)
-                .build();
-
-        saveMessage(message);
-    }
-
-    /**
-     * Retrieves the history of messages for a conversation.
-     * also for security I verify membership here if calling from a generic controller.
-     */
-    public Page<ChatMessageResponse> getChatHistory(Long conversationId, Pageable pageable) {
+    public List<ChatMessageResponse> getChatHistory(Long conversationId, int page, int size) {
         String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        boolean isMember = convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(
-                currentUsername, conversationId);
-
-        if (!isMember) {
-            throw new AccessDeniedException("You are not a member of this conversation.");
+        // 1. Security Check
+        if (!convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(currentUsername, conversationId)) {
+            throw new AccessDeniedException("Access Denied");
         }
 
-        // Fetch EVERYTHING in one query
-        return messageRepository.findByConversationIdOptimized(conversationId, pageable);
+        // 2. Page 0 = The "Hot" Page (Try Redis)
+        if (page == 0) {
+            String historyKey = "chat:history:" + conversationId;
+            List<String> cached = redisTemplate.opsForList().range(historyKey, 0, size - 1);
 
+            if (cached != null && !cached.isEmpty()) {
+                log.info("Redis Hit for Page 0 - Conv {}", conversationId);
+                return cached.stream()
+                        .map(this::deserialize)
+                        .toList();
+            }
+        }
+
+        // 3. Older Pages or Redis Miss = The "Cold" Storage (Postgres)
+        log.info("Postgres Read for Page {} - Conv {}", page, conversationId);
+        Pageable pageable = PageRequest.of(page, size, Sort.by("sentAt").descending());
+
+        return messageRepository.findByConversationIdOptimized(conversationId, pageable).getContent();
     }
 
     public Message saveMessage(Message message) {
         return messageRepository.save(message);
+    }
+
+    private ChatMessageResponse deserialize(String json) {
+        try {
+            return objectMapper.readValue(json, ChatMessageResponse.class);
+        } catch (Exception e) {
+            log.error("Failed to deserialize message from Redis", e);
+            return null; // The .filter(Objects::nonNull) will clean this up
+        }
     }
 }

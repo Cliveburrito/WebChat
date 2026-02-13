@@ -67,7 +67,13 @@ function App() {
         if (!token || !chatId) return;
         try {
             const data = await apiJson(`/api/chats/${chatId}/messages?page=${page}&size=20`, { token });
-            const fetched = (data?.content || []).slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+            // --- FIX STARTS HERE ---
+            // Check if 'data' is the array itself (Redis/List style) or a Page object (Old style)
+            const rawMessages = Array.isArray(data) ? data : (data?.content || []);
+
+            const fetched = rawMessages.slice().sort((a, b) => new Date(a.createdAt || a.sentAt) - new Date(b.createdAt || b.sentAt));
+            // --- FIX ENDS HERE ---
 
             if (page === 0) {
                 setMessages(fetched);
@@ -75,7 +81,8 @@ function App() {
                 setMessages((prev) => [...fetched, ...prev]);
             }
 
-            setHasMore(!data?.last);
+            // Logic update: If we got fewer messages than requested (20), we reached the end.
+            setHasMore(rawMessages.length === 20);
             setMsgPage(page);
         } catch (err) { console.error("Error fetching messages:", err); }
     }, [token]);
@@ -85,7 +92,7 @@ function App() {
         setConversations(prev => prev.map(c =>
             (c.id === chatId || c.conversationId === chatId) ? { ...c, unreadCount: 0 } : c
         ));
-        try { await apiJson(`/api/chats/${chatId}/read`, { token, method: "POST" }); } catch { /* empty */ }
+        try { await apiJson(`/api/chats/${chatId}/read`, { token, method: "POST" }); } catch { /* emp   ty */ }
     }, [token]);
 
     // ==========================================
@@ -187,20 +194,29 @@ function App() {
         token,
         username: currentUser,
         onNotification: (dto) => {
-            const chat = conversations.find(c => (c.conversationId === dto.conversationId || c.id === dto.conversationId));
+            // Check if the conversation already exists in our sidebar list
+            const chatExists = conversations.some(c =>
+                (c.conversationId === dto.conversationId || c.id === dto.conversationId)
+            );
 
-            bumpConversation(dto.conversationId, {
-                content: dto.content,
-                createdAt: dto.createdAt,
-                isIncoming: dto.senderUsername !== currentUser
-            });
+            if (!chatExists) {
+                // New conversation detected: Refresh the sidebar list from the API
+                fetchChats();
+            } else {
+                // Existing conversation: Bump it to the top with the new message
+                bumpConversation(dto.conversationId, {
+                    content: dto.content,
+                    createdAt: dto.createdAt,
+                    isIncoming: dto.senderUsername !== currentUser
+                });
+            }
+
+            // UI Logic for the currently open chat window
+            const currentActiveId = activeChatRef.current?.id || activeChatRef.current?.conversationId;
+            const isActive = (currentActiveId === dto.conversationId);
 
             if (dto.senderUsername !== currentUser) {
-                if (!chat?.muted) {
-                    // console.log("Play notification sound!");
-                }
-
-                const isActive = (activeChatRef.current?.id === dto.conversationId || activeChatRef.current?.conversationId === dto.conversationId);
+                // Play sound logic would go here if not muted
                 if (isActive) {
                     setMessages((prev) => [...prev, dto]);
                     markChatRead(dto.conversationId);
@@ -208,7 +224,6 @@ function App() {
             }
         },
     });
-
     // ==========================================
     // 6. UI & SETTINGS HANDLERS
     // ==========================================

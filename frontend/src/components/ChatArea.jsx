@@ -126,7 +126,7 @@ export default function ChatArea({
         }
     };
 
-    const handleSend = async () => {
+    /*const handleSend = async () => {
         const trimmed = text.trim();
         const chatId = activeChat?.conversationId || activeChat?.id;
         if (!trimmed || !chatId) return;
@@ -154,6 +154,57 @@ export default function ChatArea({
             setText("");
         } catch (err) {
             console.error("Send Error:", err);
+        }
+    }; */
+
+    const handleSend = async () => {
+        const trimmed = text.trim();
+        const chatId = activeChat?.conversationId || activeChat?.id;
+        if (!trimmed || !chatId) return;
+
+        const tempId = "temp-" + Date.now();
+
+        // 1. Create the Optimistic Message
+        const optimisticMsg = {
+            id: tempId,
+            conversationId: chatId,
+            senderUsername: currentUser,
+            content: trimmed,
+            createdAt: new Date().toISOString(),
+            status: "SENDING"
+        };
+
+        // 2. Update UI (Chat Window)
+        setMessages((prev) => [...prev, optimisticMsg]);
+        setText("");
+        shouldAutoScrollRef.current = true;
+
+        // 3. Update UI (Sidebar) - FIX: Use the optimistic message here!
+        if (onMessageSent) {
+            onMessageSent(optimisticMsg);
+        }
+
+        try {
+            // 4. Network Request
+            const response = await fetch(`/api/messages/chat/${chatId}/smsg?tempId=${tempId}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    senderUsername: currentUser,
+                    conversationId: chatId,
+                    content: trimmed,
+                }),
+            });
+
+            if (!response.ok) throw new Error("Failed to send");
+            // No response.json() needed
+
+        } catch (err) {
+            console.error("Send Error:", err);
+            setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "FAILED" } : m));
         }
     };
 

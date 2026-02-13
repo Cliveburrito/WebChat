@@ -2,7 +2,10 @@ package com.example.WebChat.DTO;
 
 
 
+import com.example.WebChat.Entity.Message;
+
 import java.time.Instant;
+import java.util.List;
 
 /**
  * The object used for the messages shown in the chat
@@ -12,27 +15,21 @@ public record ChatMessageResponse(
         String content,
         Instant createdAt,
         String senderUsername,
-        Long conversationId
+        Long conversationId,
+        List<AttachmentDTO> attachments
 ) {
 
-    @Override
-    public String content() {
-        return content;
-    }
-
-    @Override
-    public Instant createdAt() {
-        return createdAt;
-    }
-
-    @Override
-    public String senderUsername() {
-        return senderUsername;
-    }
-
-    @Override
-    public Long conversationId() {
-        return conversationId;
+    public static ChatMessageResponse fromEntity(Message message) {
+        return new ChatMessageResponse(
+                message.getMessage(),
+                message.getSentAt(),
+                message.getSender().getUsername(),
+                message.getConversation().getConversationID(),
+                // Map the attachments list to DTOs
+                message.getAttachments().stream()
+                        .map(AttachmentDTO::fromEntity)
+                        .toList()
+        );
     }
 }
 

@@ -2,8 +2,10 @@ package com.example.WebChat;
 
 import com.example.WebChat.Service.RateLimiterService;
 import io.github.bucket4j.Bucket;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -14,6 +16,11 @@ class RateLimiterServiceTest {
     @BeforeEach
     void setUp() {
         rateLimiterService = new RateLimiterService();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test

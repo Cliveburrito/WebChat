@@ -7,11 +7,13 @@ import com.example.WebChat.Repository.ConvMembershipRepository;
 import com.example.WebChat.Repository.ConversationRepository;
 import com.example.WebChat.Repository.UserRepository;
 import com.example.WebChat.Service.ConversationService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,11 +35,16 @@ public class ConversationServiceTest {
     @InjectMocks
     private ConversationService conversationService;
 
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Test
     void createGroupChatSuccessfully() {
         // Arrange
         String creatorName = "Mitsos";
-        OpenGroupChatRequest request = new OpenGroupChatRequest(List.of(2L, 3L), "Our Group");
+        OpenGroupChatRequest request = new OpenGroupChatRequest("Our Group" ,List.of(2L, 3L) );
 
         User creator = User.builder().id(1L).username(creatorName).build();
         User user2 = User.builder().id(2L).username("User2").build();

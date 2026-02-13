@@ -1,5 +1,6 @@
 package com.example.WebChat.Service;
 
+import com.example.WebChat.DTO.ChatListRow;
 import com.example.WebChat.DTO.ConversationResponse;
 import com.example.WebChat.DTO.OpenGroupChatRequest;
 import com.example.WebChat.Entity.ConvMembership;
@@ -11,6 +12,7 @@ import com.example.WebChat.Repository.ConvMembershipRepository;
 import com.example.WebChat.Repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +23,7 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class ConversationService {
-
+    private final StringRedisTemplate redisTemplate;
     private final ConversationRepository conversationRepository;
     private final ConvMembershipRepository convMembershipRepository;
     private final UserRepository userRepository;
@@ -92,17 +94,31 @@ public class ConversationService {
         User u = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        return convMembershipRepository.findUserChats(u.getId())
-                .stream()
-                .map(r -> new ConversationResponse(
-                        r.getConversationId(),
-                        r.getDisplayName(),
-                        "default-avatar.png",
-                        r.getLastContent(),
-                        r.getUnreadCount(),
-                        r.getLastMessageAt()
-                ))
-                .toList();
+        // 1. Try to get the raw rows from Postgres (Your beastly query)
+        List<ChatListRow> rows = convMembershipRepository.findUserChats(u.getId());
+
+        return rows.stream().map(r -> {
+            // 2. Check Redis for 'Hot' updates (Latest message might be newer in Redis)
+            String metaKey = "conv:meta:" + r.getConversationId();
+            Map<Object, Object> meta = redisTemplate.opsForHash().entries(metaKey);
+
+            String content = meta.containsKey("lastContent")
+                    ? (String) meta.get("lastContent")
+                    : r.getLastContent();
+
+            Instant lastAt = meta.containsKey("lastMessageAt")
+                    ? Instant.parse((String) meta.get("lastMessageAt"))
+                    : r.getLastMessageAt();
+
+            return new ConversationResponse(
+                    r.getConversationId(),
+                    r.getDisplayName(),
+                    "default-avatar.png",
+                    content,
+                    r.getUnreadCount(),
+                    lastAt
+            );
+        }).toList();
     }
 
     /**

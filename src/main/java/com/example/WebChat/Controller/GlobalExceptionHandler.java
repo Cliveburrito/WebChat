@@ -1,13 +1,17 @@
 package com.example.WebChat.Controller;
 
 import com.example.WebChat.DTO.ErrorResponse;
-import com.example.WebChat.Exception.RateLimitExceededException;
-import com.example.WebChat.Exception.ResourceNotFoundException;
-import com.example.WebChat.Exception.UserAlreadyExistsException;
+import com.example.WebChat.Exception.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.messaging.handler.annotation.support.MethodArgumentNotValidException;
+
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -76,5 +80,61 @@ public class GlobalExceptionHandler {
                 ex.getMessage()
         );
         return new ResponseEntity<>(error, HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    @ExceptionHandler(FileExceedsSizeException.class)
+    public ResponseEntity<ErrorResponse> handleFileSize(FileExceedsSizeException ex) {
+        ErrorResponse error = new ErrorResponse(
+                413, //http status for content too large
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, HttpStatus.PAYLOAD_TOO_LARGE);
+    }
+
+    @ExceptionHandler(EmailAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> emailExists(EmailAlreadyExistsException ex) {
+        ErrorResponse error = new ErrorResponse(
+                409, //http status for conflict
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex) {
+        // Collect all field errors into a single string
+        // Example output: "Validation failed: email - Invalid email format; password - must be at least 6 chars; "
+        String errorMessage = "Validation failed: " + ex.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + " - " + error.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+
+        // Create the response
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                errorMessage
+        );
+
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String message = String.format("Invalid value '%s' for parameter '%s'. Expected type: %s",
+                ex.getValue(), ex.getName(), ex.getRequiredType().getSimpleName());
+
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                message
+        );
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleMalformedJson(HttpMessageNotReadableException ex) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "Malformed JSON request. Please check your request body syntax."
+        );
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 }

@@ -7,6 +7,7 @@ import com.example.WebChat.Repository.UserRepository;
 import com.example.WebChat.Service.UserService;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,8 +22,8 @@ public class UserController {
     private final UserService userService;
     private final UserRepository userRepository;
 
-
     @GetMapping("/getall")
+    @Cacheable(value = "global_users", key = "'all'")
     public List<UserResponse> getAll() {
         return userRepository.findAll().stream()
                 .map(u -> new UserResponse(u.getId(), u.getUsername(), u.getEmail(), u.getAvatarUrl()))

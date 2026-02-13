@@ -9,6 +9,7 @@ import com.example.WebChat.Service.JwtService;
 import com.example.WebChat.Service.RateLimiterService;
 import com.example.WebChat.Service.UserService;
 import io.github.bucket4j.Bucket;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import com.example.WebChat.Repository.UserRepository;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,6 +37,11 @@ class UserServiceTest {
 
     @InjectMocks
     private UserService userService;
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void register_ShouldReturnToken_WhenSuccessful() {
