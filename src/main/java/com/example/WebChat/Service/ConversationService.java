@@ -38,18 +38,11 @@ public class ConversationService {
             throw new IllegalArgumentException("You cannot start a conversation with yourself.");
         }
 
-        // Check for existing direct conversation
-        List<ConvMembership> memberships = convMembershipRepository.findAllByUser_Id(user1ID);
-        for (ConvMembership m : memberships) {
-            Conversation conv = m.getConversation();
-            if (!conv.isGroup()) {
-                boolean isOtherPresent = convMembershipRepository.existsByUser_IdAndConversation_ConversationID(user2ID, conv.getConversationID());
-                if (isOtherPresent) {
-                    log.info("Found existing direct conversation (ID: {})", conv.getConversationID());
-                    // return the ID at once
-                    return conv.getConversationID();
-                }
-            }
+        Optional<Long> existingId = convMembershipRepository.findExistingDirectChatId(user1ID, user2ID);
+
+        if (existingId.isPresent()) {
+            log.info("Found existing direct conversation (ID: {})", existingId.get());
+            return existingId.get();
         }
 
         User user1 = userRepository.findById(user1ID).
@@ -62,23 +55,45 @@ public class ConversationService {
         return newConv.getConversationID();
     }
 
+    @Transactional
+    public ConversationResponse openDirectChatPreview(Long user1Id, Long user2Id) {
+        Long conversationId = createDirectConversation(user1Id, user2Id);
+
+        // Sidebar name for direct chat: show "the other user's username"
+        User user1 = userRepository.findById(user1Id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        User user2 = userRepository.findById(user2Id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        String displayName = user2.getUsername(); // if user1 is "me", show user2
+
+        return new ConversationResponse(
+                conversationId,
+                displayName,
+                "default-avatar.png",
+                "",
+                0,
+                Instant.now()
+        );
+    }
+
     /**
      *  Find the member user for this chat
      *  and set his unreadMsg count to 0
      */
     @Transactional
-    public void markAsRead(Long conversationId, String username) {
-        convMembershipRepository.resetUnreadCount(conversationId, username);
-        log.info("Marked conversation {} as read for user {}", conversationId, username);
+    public void markAsRead(Long conversationId, Long id) {
+        convMembershipRepository.resetUnreadCount(conversationId, id);
+
+        log.info("Marked conversation {} as read for user {}", conversationId, id);
     }
 
     /**
      * Creates a group conversation with a list of users
      */
     @Transactional
-    public Conversation createGroupChat(OpenGroupChatRequest request, String creatorUsername) {
-        User creator = userRepository.findByUsername(creatorUsername)
-                .orElseThrow(() -> new ResourceNotFoundException("Creator not found"));
+    public Conversation createGroupChat(OpenGroupChatRequest request, Long id) {
+        User creator = userRepository.getReferenceById(id);
 
         List<Long> allIds = new ArrayList<>(request.memberIds());
         if (!allIds.contains(creator.getId())) {
@@ -90,9 +105,22 @@ public class ConversationService {
         return createConversationFunction(users, true, request.groupName());
     }
 
-    public List<ConversationResponse> getUserChats(String username) {
-        User u = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    @Transactional
+    public ConversationResponse createGroupChatPreview(OpenGroupChatRequest request, Long id) {
+        Conversation conv = createGroupChat(request, id);
+
+        return new ConversationResponse(
+                conv.getConversationID(),
+                conv.getConversationName(),
+                "default-avatar.png",
+                "",
+                0,
+                conv.getCreatedAt() != null ? conv.getCreatedAt() : Instant.now()
+        );
+    }
+
+    public List<ConversationResponse> getUserChats(Long id) {
+        User u = userRepository.getReferenceById(id);
 
         // 1. Try to get the raw rows from Postgres (Your beastly query)
         List<ChatListRow> rows = convMembershipRepository.findUserChats(u.getId());
@@ -150,8 +178,8 @@ public class ConversationService {
     }
 
     @Transactional
-    public void toggleMute(String username, Long conversationId, boolean status) {
-        // Βρίσκουμε το membership του συγκεκριμένου χρήστη για το συγκεκριμένο chat
-        convMembershipRepository.toggleMute(username, conversationId, status);
+    public void toggleMute(Long id, Long conversationId, boolean status) {
+
+        convMembershipRepository.toggleMute(id, conversationId, status);
     }
 }

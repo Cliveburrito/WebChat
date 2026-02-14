@@ -1,5 +1,6 @@
 package com.example.WebChat.UtilsConfigs;
 
+import com.example.WebChat.DTO.CustomPrincipal;
 import com.example.WebChat.Service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
@@ -14,9 +15,12 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+import java.util.Collection;
 
 /**
  * WebSocket configuration class for setting up STOMP over WebSocket.
@@ -107,35 +111,50 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
                 // Only authenticate on CONNECT
                 if (StompCommand.CONNECT.equals(accessor.getCommand())) {
-
                     String authHeader = accessor.getFirstNativeHeader("Authorization");
                     if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                        // No token -> reject connection (optional)
                         throw new IllegalArgumentException("Missing Authorization header");
                     }
 
                     String token = authHeader.substring(7);
 
-                    // Validate token WITHOUT DB!!!
-                    if (!jwtService.isTokenValid(token)) {  // implement: signature + expiration check
+                    if (!jwtService.isTokenValid(token)) {
                         throw new IllegalArgumentException("Invalid JWT");
                     }
 
                     String username = jwtService.extractUsername(token);
-                    if (username == null || username.isBlank()) {
-                        throw new IllegalArgumentException("JWT has no subject");
-                    }
+                    Long userId = jwtService.extractUserId(token);
+                    var authorities = jwtService.extractAuthorities(token);
 
-
-                    Authentication auth =
-                            new UsernamePasswordAuthenticationToken(
-                                    username, null, jwtService.extractAuthorities(token));
+                    Authentication auth = getAuthentication(username, userId, authorities);
 
                     accessor.setUser(auth);
+                    log.info("WebSocket Authenticated: {} with ID {}", username, userId);
                 }
 
                 return message;
             }
         });
+    }
+
+    private static Authentication getAuthentication(String username, Long userId, Collection<? extends GrantedAuthority> authorities) {
+        if (username == null || userId == null) {
+            throw new IllegalArgumentException("Invalid JWT claims");
+        }
+
+        CustomPrincipal principal = new CustomPrincipal(
+                userId,
+                username,
+                null,   // password hash όχι εδώ
+                false,  // stealth mode
+                true,   // enabled
+                authorities
+        );
+
+        return new UsernamePasswordAuthenticationToken(
+                principal,
+                null,
+                authorities
+        );
     }
 }

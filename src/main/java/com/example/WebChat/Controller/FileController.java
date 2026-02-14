@@ -1,16 +1,16 @@
 package com.example.WebChat.Controller;
 
 import com.example.WebChat.DTO.AttachmentDTO;
+import com.example.WebChat.DTO.CustomPrincipal;
 import com.example.WebChat.Service.AttachmentService;
 import com.example.WebChat.Service.FileSystemStorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -25,10 +25,10 @@ public class FileController {
             @RequestParam("file") List<MultipartFile> files,
             @RequestParam("conversationId") Long conversationId,
             @RequestParam("messageId") Long messageId,
-            Principal principal) { // Now required for the link
+            @AuthenticationPrincipal CustomPrincipal principal) {
 
 
-        attachmentService.handleAsyncUpload(files, messageId, conversationId, principal.getName() );
+        attachmentService.handleAsyncUpload(files, messageId, conversationId, principal.id() );
         return ResponseEntity.accepted().build();
     }
 

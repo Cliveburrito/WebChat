@@ -12,6 +12,7 @@ import java.util.List;
  */
 
 public record ChatMessageResponse(
+        Long id,
         String content,
         Instant createdAt,
         String senderUsername,
@@ -21,12 +22,11 @@ public record ChatMessageResponse(
 
     public static ChatMessageResponse fromEntity(Message message) {
         return new ChatMessageResponse(
-                // Βεβαιώσου ότι το όνομα του πεδίου είναι "content" για να ταιριάζει με το JSON σου
+                message.getId(),
                 message.getMessage() != null ? message.getMessage() : "",
                 message.getSentAt(),
                 message.getSender().getUsername(),
                 message.getConversation().getConversationID(),
-                // ✅ ΕΔΩ ΓΙΝΕΤΑΙ Η ΜΕΤΑΤΡΟΠΗ
                 message.getAttachments() == null ? List.of() : message.getAttachments().stream()
                         .map(AttachmentDTO::fromEntity)
                         .toList()

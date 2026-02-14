@@ -1,14 +1,17 @@
 package com.example.WebChat.Service;
 
-import com.example.WebChat.DTO.CachedUser;
+import com.example.WebChat.DTO.CustomPrincipal;
 import com.example.WebChat.Repository.UserRepository;
 import lombok.RequiredArgsConstructor; // ← Lombok auto-generates constructor (no boilerplate!)
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * Custom implementation of Spring Security's
@@ -27,16 +30,16 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Cacheable(value = "user_details", key = "#username")
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        // This runs ONLY if the cache is empty for this username
         var user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-        // We capture the data into our Record here
-        return new CachedUser(
+        return new CustomPrincipal(
+                user.getId(),
                 user.getUsername(),
                 user.getPasswordHash(),
                 user.isStealthMode(),
-                true
+                user.isEnabled(),
+                List.of(new SimpleGrantedAuthority("ROLE_USER"))
         );
     }
 }

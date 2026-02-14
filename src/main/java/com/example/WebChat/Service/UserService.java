@@ -9,8 +9,6 @@
     import io.github.bucket4j.Bucket;
     import lombok.RequiredArgsConstructor;
     import lombok.extern.slf4j.Slf4j;
-    import org.springframework.cache.annotation.CacheEvict;
-    import org.springframework.cache.annotation.Caching;
     import org.springframework.security.authentication.AuthenticationManager;
     import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
     import org.springframework.security.crypto.password.PasswordEncoder;
@@ -106,28 +104,21 @@
             return new JwtAuthenticationResponse(jwtToken, userResponse);
         }
 
-
-        // UserService.java
         @Transactional
-        @Caching(evict = {
-                @CacheEvict(value = "user_entities", key = "#username"),
-                @CacheEvict(value = "user_details", key = "#username")
-        })
-        public void toggleStealthMode(String username, boolean enabled) {
-            // 1. Update the Database
-            userRepository.updateStealthMode(username, enabled);
+        public void toggleStealthMode(Long id, String username, boolean enabled) {
+            // Update the Database
+            userRepository.updateStealthMode(id, enabled);
 
-            // 2. Update the Global Presence (Redis)
+            // Update the Global Presence with Redis
             if (enabled) {
-                // When invisible, we just "hide" them from the list
+                // When invisible just handle it like they disconnected
                 presenceService.onDisconnect(username);
                 log.info("User {} went into Stealth Mode (Hidden)", username);
             } else {
-                // When visible, we put them back in the global list
+                // When visible we put them back in the global list like they have just connected:)
                 presenceService.onConnect(username);
                 log.info("User {} is now Visible", username);
             }
-
         }
     }
 

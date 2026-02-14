@@ -5,197 +5,393 @@ import com.example.WebChat.DTO.ChatMessageResponse;
 import com.example.WebChat.Entity.Conversation;
 import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Entity.User;
-import com.example.WebChat.Repository.*;
+import com.example.WebChat.Exception.RateLimitExceededException;
+import com.example.WebChat.Repository.ConvMembershipRepository;
+import com.example.WebChat.Repository.MessageRepository;
 import com.example.WebChat.Service.MessageService;
 import com.example.WebChat.Service.RateLimiterService;
 import com.example.WebChat.UtilsConfigs.RabbitMQConfig;
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
+import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.*;
 import org.springframework.data.redis.core.ListOperations;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import com.example.WebChat.Repository.UserRepository;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
+import java.time.Duration;
+import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class MessageServiceTest {
-    @Mock
-    private MessageRepository messageRepository;
 
-    @InjectMocks
-    private MessageService messageService;
+    @Mock MessageRepository messageRepository;
+    @Mock ConvMembershipRepository convMembershipRepository;
+    @Mock SimpMessagingTemplate messagingTemplate;
+    @Mock RateLimiterService rateLimiter;
+    @Mock RabbitTemplate rabbitTemplate;
+    @Mock StringRedisTemplate redisTemplate;
+    @Mock ObjectMapper objectMapper;
 
-    @Mock private UserRepository userRepository;
-    @Mock private ConvMembershipRepository convMembershipRepository;
-    @Mock private RateLimiterService rateLimiter;
-    @Mock private SimpMessagingTemplate messagingTemplate;
-    @Mock private RabbitTemplate rabbitTemplate;
+    @Mock ListOperations<String, String> listOps;
+    @Mock Bucket bucket;
 
-    // Use StringRedisTemplate to match the Service type exactly
-    @Mock private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
-    @Mock private ListOperations<String, String> listOps;
+    @InjectMocks MessageService messageService;
 
-    // We need this to handle the JSON conversion in the 'Redis Hit' test
-    @Mock private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
-    @Mock private Bucket bucket;
+    @Captor ArgumentCaptor<ChatMessageEvent> eventCaptor;
+    @Captor ArgumentCaptor<Message> messageCaptor;
 
+    private static final Long USER_ID = 1L;
+    private static final String USERNAME = "testuser";
+    private static final Long CONVERSATION_ID = 100L;
+    private static final String CONTENT = "Hello, world!";
+    private static final String TEMP_ID = "temp-123-abc";
+
+    private User user;
+    private Conversation conversation;
+
+    private String historyKey() {
+        return "chat:history:" + CONVERSATION_ID;
+    }
 
     @BeforeEach
     void setUp() {
-        // Clear context before each test to be safe
-        SecurityContextHolder.clearContext();
-    }
-    @AfterEach
-    void tearDown() {
-        SecurityContextHolder.clearContext();
+        user = User.builder().id(USER_ID).username(USERNAME).build();
+        conversation = Conversation.builder().conversationID(CONVERSATION_ID).isGroup(false).build();
+
+        lenient().when(redisTemplate.opsForList()).thenReturn(listOps);
     }
 
+    /* =========================================================
+       processAndSend
+       ========================================================= */
 
-    @Test
-    void shouldSaveMessageSuccessfully() {
-        // Arrange
-        Message msg = Message.builder().message("Hello").build();
-        when(messageRepository.save(any())).thenReturn(msg);
+    @Nested
+    @DisplayName("processAndSend()")
+    class ProcessAndSendTests {
 
-        // Act
-        Message saved = messageService.saveMessage(msg);
+        @Test
+        @DisplayName("Happy path: broadcasts WS + publishes RabbitMQ")
+        void shouldProcessAndSend() {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
+            when(rateLimiter.resolveMessageBucket(USER_ID)).thenReturn(bucket);
+            when(bucket.tryConsume(1)).thenReturn(true);
 
-        // Assert
-        assertNotNull(saved);
-        assertEquals("Hello", saved.getMessage());
-        verify(messageRepository, times(1)).save(any());
+            messageService.processAndSend(USER_ID, USERNAME, CONVERSATION_ID, CONTENT, TEMP_ID);
+
+            // WS
+            verify(messagingTemplate).convertAndSend(
+                    eq("/topic/chat/" + CONVERSATION_ID),
+                    any(ChatMessageEvent.class)
+            );
+
+            // Rabbit
+            verify(rabbitTemplate).convertAndSend(
+                    eq(RabbitMQConfig.CHAT_EXCHANGE),
+                    eq(RabbitMQConfig.CHAT_ROUTING_KEY),
+                    eventCaptor.capture()
+            );
+
+            ChatMessageEvent e = eventCaptor.getValue();
+            assertThat(e.tempId()).isEqualTo(TEMP_ID);
+            assertThat(e.content()).isEqualTo(CONTENT);
+            assertThat(e.senderName()).isEqualTo(USERNAME);
+            assertThat(e.conversationId()).isEqualTo(CONVERSATION_ID);
+            assertThat(e.sentAt()).isNotNull();
+
+            verifyNoMoreInteractions(rabbitTemplate, messagingTemplate);
+        }
+
+        @Test
+        @DisplayName("Throws AccessDeniedException when user not member; no WS/Rabbit")
+        void shouldThrowForbiddenWhenNotMember() {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(false);
+
+            assertThatThrownBy(() ->
+                    messageService.processAndSend(USER_ID, USERNAME, CONVERSATION_ID, CONTENT, TEMP_ID)
+            ).isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+                    .hasMessageContaining("not a member");
+
+            verifyNoInteractions(rateLimiter, messagingTemplate, rabbitTemplate);
+        }
+
+        @Test
+        @DisplayName("Throws RateLimitExceededException when bucket denies; no WS/Rabbit")
+        void shouldThrowWhenRateLimited() {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
+            when(rateLimiter.resolveMessageBucket(USER_ID)).thenReturn(bucket);
+            when(bucket.tryConsume(1)).thenReturn(false);
+
+            assertThatThrownBy(() ->
+                    messageService.processAndSend(USER_ID, USERNAME, CONVERSATION_ID, CONTENT, TEMP_ID)
+            ).isInstanceOf(RateLimitExceededException.class)
+                    .hasMessageContaining("Too many messages");
+
+            verify(messagingTemplate, never()).convertAndSend(anyString(), any(ChatMessageEvent.class));
+            verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any(ChatMessageEvent.class));
+        }
+
+        @Test
+        @DisplayName("Order: WS broadcast happens before Rabbit publish")
+        void shouldBroadcastBeforeRabbit() {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
+            when(rateLimiter.resolveMessageBucket(USER_ID)).thenReturn(bucket);
+            when(bucket.tryConsume(1)).thenReturn(true);
+
+            messageService.processAndSend(USER_ID, USERNAME, CONVERSATION_ID, CONTENT, TEMP_ID);
+
+            InOrder inOrder = inOrder(messagingTemplate, rabbitTemplate);
+
+            inOrder.verify(messagingTemplate).convertAndSend(
+                    eq("/topic/chat/" + CONVERSATION_ID),
+                    any(ChatMessageEvent.class)
+            );
+
+            inOrder.verify(rabbitTemplate).convertAndSend(
+                    eq(RabbitMQConfig.CHAT_EXCHANGE),
+                    eq(RabbitMQConfig.CHAT_ROUTING_KEY),
+                    any(ChatMessageEvent.class)
+            );
+        }
     }
 
-    @Test
-    void shouldReturnChatHistoryFromRedisAndAvoidRepo() throws Exception {
-        // 1. Arrange
-        Long convId = 1L;
-        String username = "Mitsos";
-        int size = 10;
-        String historyKey = "chat:history:" + convId;
+    /* =========================================================
+       getChatHistory
+       ========================================================= */
 
-        // Security Context Setup
-        Authentication auth = new UsernamePasswordAuthenticationToken(username, null);
-        SecurityContextHolder.getContext().setAuthentication(auth);
+    @Nested
+    @DisplayName("getChatHistory()")
+    class GetChatHistoryTests {
 
-        // Membership Stub
-        when(convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(username, convId))
-                .thenReturn(true);
+        @Test
+        @DisplayName("Redis HIT for cached page within first 100 messages")
+        void shouldReturnFromRedisHit() throws Exception {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
 
-        // Redis Mocking
-        when(redisTemplate.opsForList()).thenReturn(listOps);
-        String jsonMessage = "{\"content\":\"Cached!\"}";
-        when(listOps.range(historyKey, 0, size - 1)).thenReturn(List.of(jsonMessage));
+            // page=0 size=20 => start 0 end 19
+            when(listOps.size(historyKey())).thenReturn(50L);
 
-        // Mock the Deserialization
-        ChatMessageResponse cachedDto = new ChatMessageResponse("Cached!", Instant.now(), username, convId, List.of());
-        when(objectMapper.readValue(jsonMessage, ChatMessageResponse.class)).thenReturn(cachedDto);
+            List<String> cachedJson = List.of(
+                    "{\"id\":1,\"content\":\"Hello\"}",
+                    "{\"id\":2,\"content\":\"World\"}"
+            );
+            when(listOps.range(historyKey(), 0, 19)).thenReturn(cachedJson);
 
-        // 2. Act
-        List<ChatMessageResponse> result = messageService.getChatHistory(convId, 0, size);
+            ChatMessageResponse r1 = mock(ChatMessageResponse.class);
+            ChatMessageResponse r2 = mock(ChatMessageResponse.class);
 
-        // 3. Assert
-        assertEquals("Cached!", result.get(0).content());
-        verifyNoInteractions(messageRepository); // Postgres was never touched!
+            when(objectMapper.readValue(cachedJson.get(0), ChatMessageResponse.class)).thenReturn(r1);
+            when(objectMapper.readValue(cachedJson.get(1), ChatMessageResponse.class)).thenReturn(r2);
+
+            List<ChatMessageResponse> out = messageService.getChatHistory(CONVERSATION_ID, 0, 20, USER_ID);
+
+            assertThat(out).containsExactly(r1, r2);
+            verifyNoInteractions(messageRepository);
+        }
+
+        @Test
+        @DisplayName("Redis returns bad JSON entries -> deserialize filters nulls")
+        void shouldFilterBadJsonFromRedis() throws Exception {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
+            when(listOps.size(historyKey())).thenReturn(50L);
+
+            List<String> cachedJson = List.of("{bad}", "{\"id\":2}");
+            when(listOps.range(historyKey(), 0, 19)).thenReturn(cachedJson);
+
+            ChatMessageResponse ok = mock(ChatMessageResponse.class);
+            when(objectMapper.readValue("{bad}", ChatMessageResponse.class)).thenThrow(new RuntimeException("boom"));
+            when(objectMapper.readValue("{\"id\":2}", ChatMessageResponse.class)).thenReturn(ok);
+
+            List<ChatMessageResponse> out = messageService.getChatHistory(CONVERSATION_ID, 0, 20, USER_ID);
+
+            assertThat(out).containsExactly(ok);
+            verifyNoInteractions(messageRepository);
+        }
+
+        @Test
+        @DisplayName("Page 0 Redis MISS -> warms up 100 from DB, refreshes Redis, returns first 'size'")
+        void shouldWarmUpCacheOnFirstPageMiss() throws Exception {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
+
+            // MISS: either size is 0 or not enough
+            when(listOps.size(historyKey())).thenReturn(0L);
+
+            // DB warmup IDs
+            Pageable warmUpPageable = PageRequest.of(0, 100, Sort.by("sentAt").descending());
+            @SuppressWarnings("unchecked")
+            Slice<Long> idsSlice = mock(Slice.class);
+            when(idsSlice.isEmpty()).thenReturn(false);
+            when(idsSlice.getContent()).thenReturn(List.of(11L, 22L, 33L));
+            when(messageRepository.findMessageIds(CONVERSATION_ID, warmUpPageable)).thenReturn(idsSlice);
+
+            // DB messages
+            Message m1 = mock(Message.class);
+            Message m2 = mock(Message.class);
+            Message m3 = mock(Message.class);
+            when(messageRepository.findMessagesWithDetails(List.of(11L, 22L, 33L)))
+                    .thenReturn(List.of(m1, m2, m3));
+
+            // fromEntity is static -> needs mockStatic
+            ChatMessageResponse r1 = mock(ChatMessageResponse.class);
+            ChatMessageResponse r2 = mock(ChatMessageResponse.class);
+            ChatMessageResponse r3 = mock(ChatMessageResponse.class);
+
+            try (MockedStatic<ChatMessageResponse> mocked = mockStatic(ChatMessageResponse.class)) {
+                mocked.when(() -> ChatMessageResponse.fromEntity(m1)).thenReturn(r1);
+                mocked.when(() -> ChatMessageResponse.fromEntity(m2)).thenReturn(r2);
+                mocked.when(() -> ChatMessageResponse.fromEntity(m3)).thenReturn(r3);
+
+                // serialization for redis
+                when(objectMapper.writeValueAsString(any(ChatMessageResponse.class))).thenReturn("json");
+
+                List<ChatMessageResponse> out = messageService.getChatHistory(CONVERSATION_ID, 0, 2, USER_ID);
+
+                // returns first "size" only => 2
+                assertThat(out).containsExactly(r1, r2);
+            }
+
+            verify(redisTemplate).delete(historyKey());
+            verify(listOps).rightPushAll(eq(historyKey()), anyList());
+            verify(listOps).trim(historyKey(), 0, 99);
+            verify(redisTemplate).expire(eq(historyKey()), any(Duration.class));
+        }
+
+        @Test
+        @DisplayName("Page >0 Redis miss -> DB read for that page")
+        void shouldFetchFromDbForPagesBeyondRedisOrMiss() {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
+
+            // Force Redis check to happen, but return empty so it falls back to DB
+            when(listOps.size(historyKey())).thenReturn(60L);            // 60 > end(59) so range() will be called
+            when(listOps.range(historyKey(), 40, 59)).thenReturn(List.of()); // empty => miss => DB path
+
+            Pageable pageable = PageRequest.of(2, 20, Sort.by("sentAt").descending());
+
+            @SuppressWarnings("unchecked")
+            Slice<Long> idsSlice = mock(Slice.class);
+            when(idsSlice.getContent()).thenReturn(List.of(5L, 6L, 7L));
+            when(messageRepository.findMessageIds(CONVERSATION_ID, pageable)).thenReturn(idsSlice);
+
+            Message m5 = mock(Message.class);
+            Message m6 = mock(Message.class);
+            Message m7 = mock(Message.class);
+            when(messageRepository.findMessagesWithDetails(List.of(5L, 6L, 7L)))
+                    .thenReturn(List.of(m5, m6, m7));
+
+            ChatMessageResponse r5 = mock(ChatMessageResponse.class);
+            ChatMessageResponse r6 = mock(ChatMessageResponse.class);
+            ChatMessageResponse r7 = mock(ChatMessageResponse.class);
+
+            try (MockedStatic<ChatMessageResponse> mocked = mockStatic(ChatMessageResponse.class)) {
+                mocked.when(() -> ChatMessageResponse.fromEntity(m5)).thenReturn(r5);
+                mocked.when(() -> ChatMessageResponse.fromEntity(m6)).thenReturn(r6);
+                mocked.when(() -> ChatMessageResponse.fromEntity(m7)).thenReturn(r7);
+
+                List<ChatMessageResponse> out = messageService.getChatHistory(CONVERSATION_ID, 2, 20, USER_ID);
+                assertThat(out).containsExactly(r5, r6, r7);
+            }
+        }
+
+
+        @Test
+        @DisplayName("Throws FORBIDDEN when user not member")
+        void shouldThrowForbiddenWhenNotMember() {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(false);
+
+            assertThatThrownBy(() ->
+                    messageService.getChatHistory(CONVERSATION_ID, 0, 20, USER_ID)
+            ).isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("403");
+        }
+
+        @Test
+        @DisplayName("Page 0 warmup: DB returns empty => empty list")
+        void shouldReturnEmptyWhenNoMessages() {
+            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
+            when(listOps.size(historyKey())).thenReturn(0L);
+
+            Pageable warmUpPageable = PageRequest.of(0, 100, Sort.by("sentAt").descending());
+            @SuppressWarnings("unchecked")
+            Slice<Long> emptySlice = mock(Slice.class);
+            when(emptySlice.isEmpty()).thenReturn(true);
+
+            when(messageRepository.findMessageIds(CONVERSATION_ID, warmUpPageable)).thenReturn(emptySlice);
+
+            List<ChatMessageResponse> out = messageService.getChatHistory(CONVERSATION_ID, 0, 20, USER_ID);
+
+            assertThat(out).isEmpty();
+            verify(messageRepository, never()).findMessagesWithDetails(anyList());
+        }
     }
 
-    @Test
-    void shouldReturnChatHistoryFromRepoWhenRedisIsEmpty() {
-        // 1. Arrange
-        Long convId = 1L;
-        String username = "Mitsos";
-        int page = 0, size = 10;
-        Pageable pageable = PageRequest.of(page, size, Sort.by("sentAt").descending());
+    /* =========================================================
+       create()
+       ========================================================= */
 
-        Authentication auth = new UsernamePasswordAuthenticationToken(username, null);
-        SecurityContextHolder.getContext().setAuthentication(auth);
+    @Nested
+    @DisplayName("create()")
+    class CreateTests {
 
-        when(convMembershipRepository.existsByUser_UsernameAndConversation_ConversationID(username, convId))
-                .thenReturn(true);
+        @Test
+        @DisplayName("Creates message and saves it")
+        void shouldCreateAndSaveMessage() {
+            when(messageRepository.save(any(Message.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
 
-        // Mock Redis Miss
-        when(redisTemplate.opsForList()).thenReturn(listOps);
-        when(listOps.range("chat:history:" + convId, 0, size - 1)).thenReturn(List.of());
+            Message result = messageService.create(user, conversation, CONTENT);
 
-        // Mock DB Response
-        User user = User.builder().username("Mitsos").email("G@m.com").id(1L).build();
-        Conversation conv = Conversation.builder().conversationID(1L).build();
-        Message entity = new Message();
-        entity.setMessage("Hello world!");
-        entity.setSentAt(Instant.now());
-        entity.setSender(user);
-        entity.setConversation(conv);
-        ChatMessageResponse dto = new ChatMessageResponse("Hello world!", Instant.now(), username, convId, List.of());
-        Slice<Message> mockSlice = new SliceImpl<>(List.of(entity), pageable, false);
+            assertThat(result).isNotNull();
+            assertThat(result.getMessage()).isEqualTo(CONTENT);
+            assertThat(result.getSender()).isEqualTo(user);
+            assertThat(result.getConversation()).isEqualTo(conversation);
+            assertThat(result.getSentAt()).isNotNull();
 
-        when(messageRepository.findByConversationIdOptimized(convId, pageable)).thenReturn(mockSlice);
-
-        // 2. Act
-        List<ChatMessageResponse> result = messageService.getChatHistory(convId, page, size);
-
-        // 3. Assert
-        assertEquals(1, result.size());
-        assertEquals("Hello world!", result.get(0).content());
-        verify(messageRepository).findByConversationIdOptimized(convId, pageable);
+            verify(messageRepository).save(messageCaptor.capture());
+            Message saved = messageCaptor.getValue();
+            assertThat(saved.getMessage()).isEqualTo(CONTENT);
+        }
     }
 
-    @Test
-    void shouldProcessAndSendMessageSuccessfully() {
-        // 1. Arrange
-        String username = "Mitsos";
-        Long convId = 1L;
-        String content = "Hello!";
-        String tempId = "uuid-123"; // The tracking number!
+    /* =========================================================
+       deserialize()
+       ========================================================= */
 
-        User user = User.builder().id(10L).username(username).build();
-        when(userRepository.findByUsername(username)).thenReturn(Optional.of(user));
-        when(convMembershipRepository.existsByUser_IdAndConversation_ConversationID(10L, convId)).thenReturn(true);
-        when(rateLimiter.resolveMessageBucket(username)).thenReturn(bucket);
-        when(bucket.tryConsume(1)).thenReturn(true);
+    @Nested
+    @DisplayName("deserialize()")
+    class DeserializeTests {
 
-        // 2. Act
-        // Notice: We don't expect a Response back yet because the DB hasn't seen it!
-        messageService.processAndSend(username, convId, content, tempId);
+        @Test
+        void shouldDeserializeJson() throws Exception {
+            String json = "{\"id\":1}";
+            ChatMessageResponse expected = mock(ChatMessageResponse.class);
+            when(objectMapper.readValue(json, ChatMessageResponse.class)).thenReturn(expected);
 
-        // 3. Assert (The WebSocket Broadcast)
-        // We verify that the "Event" (the instant shout) was sent
-        verify(messagingTemplate).convertAndSend(
-                eq("/topic/chat/" + convId),
-                argThat((ChatMessageEvent event) ->
-                        event.tempId().equals(tempId) && event.content().equals(content)
-                )
-        );
+            ChatMessageResponse out = messageService.deserialize(json);
 
-        // 4. Assert (The RabbitMQ Handoff)
-        // We verify the "Recipe" was sent to the background worker
-        verify(rabbitTemplate).convertAndSend(
-                eq(RabbitMQConfig.CHAT_EXCHANGE),
-                eq(RabbitMQConfig.CHAT_ROUTING_KEY),
-                any(ChatMessageEvent.class)
-        );
+            assertThat(out).isEqualTo(expected);
+        }
 
-        // IMPORTANT: We REMOVE the verify for unread counts here.
-        // Why? Because that happens in the Consumer test, not the Service test!
+        @Test
+        void shouldReturnNullOnError() throws Exception {
+            String json = "{bad}";
+            when(objectMapper.readValue(json, ChatMessageResponse.class))
+                    .thenThrow(new RuntimeException("boom"));
+
+            ChatMessageResponse out = messageService.deserialize(json);
+
+            assertThat(out).isNull();
+        }
     }
 }

@@ -25,17 +25,24 @@ public class RateLimiterService {
         });
     }
 
-    public Bucket resolveMessageBucket(String username) {
-        return buckets.computeIfAbsent("MSG_" + username , k -> Bucket.builder()
+    public Bucket resolveMessageBucket(Long userId) {
+        return buckets.computeIfAbsent("MSG_" + userId , k -> Bucket.builder()
                 .addLimit(limit -> limit
                         .capacity(5)
                         .refillGreedy(5, Duration.ofSeconds(1)))
                 .build());
     }
 
-    public Bucket resolveFileBucket(String username) {
-        return Bucket.builder()
-                .addLimit(limit -> limit.capacity(5).refillGreedy(5, Duration.ofMinutes(1)))
-                .build();
+    public Bucket resolveFileBucket(Long userId) {
+        // 2. computeIfAbsent: Αν υπάρχει το δίνει, αν όχι το φτιάχνει ΜΙΑ φορά
+        return buckets.computeIfAbsent("FILE" + userId, key ->
+                Bucket.builder()
+                        .addLimit(limit -> limit.capacity(5).refillGreedy(5, Duration.ofMinutes(1)))
+                        .build()
+        );
+    }
+
+    public void clearBuckets() {
+        buckets.clear();
     }
 }

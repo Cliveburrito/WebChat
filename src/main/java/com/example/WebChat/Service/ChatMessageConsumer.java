@@ -67,8 +67,10 @@ public class ChatMessageConsumer {
 
             // Push newest to the left, trim to keep only 50
             redisTemplate.opsForList().leftPush(historyKey, msgJson);
-            redisTemplate.opsForList().trim(historyKey, 0, 49);
+            log.info("Sliding window on the cache executed, pushed left {}", msgJson);
+            redisTemplate.opsForList().trim(historyKey, 0, 99);
             redisTemplate.expire(historyKey, Duration.ofDays(7));
+            log.info("Sliding window on the cache executed !");
 
             // --- REDIS: Update Sidebar Metadata (Hash) ---
             String metaKey = "conv:meta:" + event.conversationId();

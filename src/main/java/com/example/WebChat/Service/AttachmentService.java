@@ -15,9 +15,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.Objects;
-
-
 
 @RequiredArgsConstructor
 @Service
@@ -36,12 +33,12 @@ public class AttachmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment with storage name " + storageName + " not found"));
     }
 
-    public void handleAsyncUpload(List<MultipartFile> files, Long messageId, Long conversationId, String username) {
-        Bucket bucket = rateLimiter.resolveFileBucket(username);
+    public void handleAsyncUpload(List<MultipartFile> files, Long messageId, Long conversationId, Long id) {
+        Bucket bucket = rateLimiter.resolveFileBucket(id);
 
         // We consume tokens based on the NUMBER of files
         if (!bucket.tryConsume(files.size())) {
-            log.warn("User {} is attempting to upload too many files!", username);
+            log.warn("User {} is attempting to upload too many files!", id);
             throw new RateLimitExceededException("File upload limit reached. Please wait a minute.");
         }
 
@@ -51,12 +48,23 @@ public class AttachmentService {
                 .toList();
 
         List<String> originalNames = files.stream()
-                .map(f -> Paths.get(Objects.requireNonNull(f.getOriginalFilename())).getFileName().toString())
+                .map(f -> sanitizeOriginalFilename(f.getOriginalFilename()))
                 .toList();
+
 
         // Hand off to RabbitMQ , delegate the heavy db work to the consumer basically
         FileLinkTask task = new FileLinkTask(messageId, conversationId, storageNames, originalNames);
         rabbitTemplate.convertAndSend(RabbitMQConfig.CHAT_EXCHANGE, RabbitMQConfig.FILE_LINK_ROUTING_KEY, task);
     }
+
+    private static String sanitizeOriginalFilename(String originalFilename) {
+        if (originalFilename == null || originalFilename.isBlank()) {
+            return "file";
+        }
+
+        String normalized = originalFilename.replace('\\', '/');
+        return Paths.get(normalized).getFileName().toString();
+    }
+
 
 }

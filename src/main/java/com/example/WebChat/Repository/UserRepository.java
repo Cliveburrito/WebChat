@@ -13,10 +13,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User,Long> {
-    // UserRepository.java
     @Cacheable(value = "user_entities", key = "#username")
     Optional<User> findByUsername(String username);
-
 
     boolean existsByUsername(String username);
 
@@ -24,14 +22,11 @@ public interface UserRepository extends JpaRepository<User,Long> {
 
     @NonNull
     @Override
-    List<User> findAllById(Iterable<Long> ids);
-
-    @Query("SELECT u.stealthMode FROM User u WHERE u.username = :username")
-    boolean isStealthModeEnabled(@Param("username") String username);
+    List<User> findAllById( Iterable<Long> ids);
 
     @Modifying
     @Transactional
-    @Query("UPDATE User u SET u.stealthMode = :enabled WHERE u.username = :username")
-    void updateStealthMode(@Param("username") String username, @Param("enabled") boolean enabled);
+    @Query("UPDATE User u SET u.stealthMode = :enabled WHERE u.id = :userId")
+    void updateStealthMode(@Param("userId") Long userId, @Param("enabled") boolean enabled);
 
 }

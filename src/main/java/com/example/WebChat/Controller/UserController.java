@@ -1,17 +1,17 @@
 package com.example.WebChat.Controller;
 
+import com.example.WebChat.DTO.CustomPrincipal;
 import com.example.WebChat.DTO.UserResponse;
 import com.example.WebChat.Entity.User;
 import com.example.WebChat.Exception.ResourceNotFoundException;
 import com.example.WebChat.Repository.UserRepository;
 import com.example.WebChat.Service.UserService;
-
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -39,10 +39,10 @@ public class UserController {
 
     @PatchMapping("/me/stealth")
     public ResponseEntity<Void> updateStealthMode(
-            Principal principal,
+            @AuthenticationPrincipal CustomPrincipal principal,
             @RequestParam boolean enabled) {
 
-        userService.toggleStealthMode(principal.getName(), enabled);
+        userService.toggleStealthMode(principal.id(), principal.username(), enabled);
         return ResponseEntity.ok().build();
     }
 }

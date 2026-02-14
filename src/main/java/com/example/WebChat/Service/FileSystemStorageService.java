@@ -46,7 +46,12 @@ public class FileSystemStorageService implements StorageService {
 
     @Override
     public String store(MultipartFile file) {
-        // 1. Validate file size using the value from application.yml
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename != null && originalFilename.contains("..")) {
+            throw new RuntimeException("Security Breach: Cannot store file with relative path " + originalFilename);
+        }
+
+        // Validate file size using the value from application.yml
         if (file.getSize() > maxFileSize) {
             throw new FileExceedsSizeException("File size exceeds the allowed limit of " + (maxFileSize / 1024 / 1024) + "MB");
         }

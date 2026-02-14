@@ -115,25 +115,43 @@ export function useChatData({ token, currentUser }) {
 
     const openDirectChat = useCallback(
         async (targetUserId) => {
-            if (!token || !targetUserId || !currentUserId) return;
+            if (!token || !targetUserId || !currentUserId) {
+                console.error("Cannot open chat: Missing IDs", { token: !!token, targetUserId, currentUserId });
+                return;
+            }
 
             try {
-                const res = await apiJson("/api/chats/direct", {
+                // Το Backend τώρα επιστρέφει το ConversationResponse DTO
+                const chatDTO = await apiJson("/api/chats/direct", {
                     token,
                     method: "POST",
-                    body: { id1: currentUserId, id2: targetUserId },
+                    body: {
+                        id1: currentUserId,
+                        id2: targetUserId
+                    }
                 });
 
-                const conversationId = res?.conversationID;
-                if (!conversationId) return;
+                if (chatDTO) {
+                    console.log("Direct Chat Opened (DTO):", chatDTO);
 
-                await fetchChats(); // refresh sidebar list
-                setActiveChat({ conversationId }); // enough to load messages
+                    // 1. Update List Locally (Fast)
+                    setConversations(prev => {
+                        const chatId = chatDTO.conversationId || chatDTO.id;
+                        // Avoid duplicates
+                        const exists = prev.find(c => normalizeId(c.conversationId || c.id) === normalizeId(chatId));
+                        if (exists) return prev;
+                        // Add new chat to top
+                        return [chatDTO, ...prev];
+                    });
+
+                    // 2. Open Chat Window
+                    setActiveChat(chatDTO);
+                }
             } catch (err) {
                 console.error("openDirectChat failed:", err);
             }
         },
-        [token, currentUserId, fetchChats]
+        [token, currentUserId]
     );
 
     const onGroupCreated = useCallback((newGroup) => {
@@ -208,14 +226,18 @@ export function useChatData({ token, currentUser }) {
         };
     }, [token, currentUser]);
 
-    // ✅ Load messages only when chat changes
-    useEffect(() => {
-        const id = activeChat?.conversationId || activeChat?.id;
-        if (!id) return;
+    const currentChatId = activeChat?.conversationId || activeChat?.id;
 
-        fetchMessages(id, 0);
-        markChatRead(id);
-    }, [activeChat?.conversationId, activeChat?.id, fetchMessages, markChatRead]);
+    useEffect(() => {
+        if (!currentChatId || !token) return;
+
+        const timer = setTimeout(() => {
+            fetchMessages(currentChatId, 0);
+            markChatRead(currentChatId);
+        }, 0);
+
+        return () => clearTimeout(timer);
+    }, [currentChatId, token, fetchMessages, markChatRead]);
 
     const activeChatId = useMemo(() => activeChat?.conversationId || activeChat?.id, [activeChat]);
 

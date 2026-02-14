@@ -19,7 +19,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<JwtAuthenticationResponse> register(
-            @Valid @RequestBody RegisterUserRequest registerRequest, // <--- 2. Add @Valid here
+            @Valid @RequestBody RegisterUserRequest registerRequest,
             HttpServletRequest req) {
         String ipAddress = req.getRemoteAddr();
         return ResponseEntity.ok(userService.register(registerRequest , ipAddress));
@@ -27,7 +27,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<JwtAuthenticationResponse> login(
-            @Valid @RequestBody LoginUserRequest loginRequest, // <--- 3. Add @Valid here
+            @Valid @RequestBody LoginUserRequest loginRequest,
             HttpServletRequest request) {
         String ipAddress = request.getRemoteAddr();
         return ResponseEntity.ok(userService.login(loginRequest, ipAddress));

@@ -31,6 +31,9 @@ public class User implements Serializable {
     @Column(nullable = false)
     private Instant createdAt;
 
+    @Column(nullable = false)
+    private boolean enabled = true;
+
     private Instant lastSeenAt;
 
     private String avatarUrl;

@@ -52,7 +52,10 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-
+                .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint(
+                        new org.springframework.security.web.authentication.HttpStatusEntryPoint(
+                                org.springframework.http.HttpStatus.UNAUTHORIZED)))
                 // Publicly accessible routes (no token required)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(

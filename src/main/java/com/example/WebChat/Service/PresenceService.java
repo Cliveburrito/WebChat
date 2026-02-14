@@ -41,8 +41,9 @@ public class PresenceService {
 
     public void broadcastPresence() {
         Set<String> onlineUsers = redisTemplate.opsForSet().members(REDIS_SET_KEY);
-        assert onlineUsers != null;
+        if (onlineUsers == null) onlineUsers = Set.of();
         messagingTemplate.convertAndSend("/topic/public/presence", onlineUsers);
+
     }
 
     public Set<String> getOnlineUsers() {

@@ -1,5 +1,6 @@
 package com.example.WebChat.UtilsConfigs;
 
+import com.example.WebChat.DTO.CustomPrincipal;
 import com.example.WebChat.Service.CustomUserDetailsService;
 import com.example.WebChat.Service.JwtService;
 import jakarta.servlet.FilterChain;
@@ -11,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -46,7 +46,6 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
-    private final CustomUserDetailsService userDetailsService;
 
     /**
      * Core filter logic, invoked once per request.
@@ -64,72 +63,59 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * </ol>
      */
     @Override
-    protected void doFilterInternal(
+    public void doFilterInternal(
             @NonNull HttpServletRequest request,
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
-        String uri = request.getRequestURI();
-
-        // pass up on Prometheus,,,,too much noise
-        if (uri.endsWith("/actuator/prometheus")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // Read Authorization header (expected format: "Bearer <jwt>")
         final String authHeader = request.getHeader("Authorization");
-        String jwt;
-        String username;
 
-        // If no Authorization header or does not start with "Bearer ", skip JWT processing
-        // The request continues unauthenticated (it may still access public endpoints)
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        // 1. Guard Clauses (Έλεγχοι στην αρχή)
+        if (authHeader == null || !authHeader.startsWith("Bearer ") || request.getRequestURI().endsWith("/actuator/prometheus")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Extract raw JWT value from header (strip "Bearer " prefix)
-        jwt = authHeader.substring(7);
-        log.info("jwt = {}", jwt);
+        String jwt = authHeader.substring(7);
+        log.info("The JWT: {}" , jwt);
 
-        // Extract username from token (implementation usually also checks signature & expiration)
-        username = jwtService.extractUsername(jwt);
+        // 2. Stateless Auth Flow
+        if (jwtService.isTokenValid(jwt)) {
+            String username = jwtService.extractUsername(jwt);
 
-        // Proceed only if:
-        //  - a username was successfully extracted, AND
-        //  - no authentication has yet been set in the security context
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UsernamePasswordAuthenticationToken authToken = buildAuthToken(jwt, username, request);
 
-            // Load user details from database or other backend source.
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-
-            // Validate the JWT against the loaded user, meaning username match, expiration, signature
-            if (jwtService.isTokenValid(jwt)) {
-
-                // Create an authenticated token for the current user
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                                userDetails,                 // principal
-                                null,                        // credentials (not stored)
-                                userDetails.getAuthorities() // roles/authorities
-                        );
-
-                // Attach additional request details, IP, session ID, etc.
-                authToken.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                );
-
-                // Store the Authentication object in the security context
-                // From this point on, controllers and other components can retrieve:
-                // SecurityContextHolder.getContext().getAuthentication()
                 SecurityContextHolder.getContext().setAuthentication(authToken);
+                log.debug("Stateless authentication set for user: {}", username);
             }
-            // If token is invalid, we do nothing , the request proceeds without authentication
         }
 
-        // Continue with the rest of the filter chain, regardless of auth outcome.
         filterChain.doFilter(request, response);
+    }
+
+    private UsernamePasswordAuthenticationToken buildAuthToken(String jwt, String username, HttpServletRequest request) {
+        Long userId = jwtService.extractUserId(jwt);
+
+        var authorities = jwtService.extractAuthorities(jwt);
+
+        CustomPrincipal principal = new CustomPrincipal(
+                userId,
+                username,
+                null,  // Password hash not needed
+                false, // Stealth mode handled by Redis/Service
+                true,  // Enabled
+                authorities
+        );
+
+        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                principal,
+                null,
+                authorities
+        );
+
+        authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        return authToken;
     }
 }

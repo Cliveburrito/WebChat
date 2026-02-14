@@ -1,20 +1,22 @@
 package com.example.WebChat.Controller;
 
+import com.example.WebChat.DTO.CustomPrincipal;
 import com.example.WebChat.DTO.ErrorResponse;
 import com.example.WebChat.Exception.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.messaging.handler.annotation.support.MethodArgumentNotValidException;
-
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
-
-import java.util.Map;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -44,7 +46,7 @@ public class GlobalExceptionHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 "An unexpected error occurred. Please try again later."
         );
-        ex.printStackTrace();
+        log.info("{}", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
@@ -54,6 +56,7 @@ public class GlobalExceptionHandler {
                 HttpStatus.FORBIDDEN.value(),
                 "You do not have permission to access this bro."
         );
+        log.info("{}", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.FORBIDDEN);
     }
 
@@ -63,6 +66,7 @@ public class GlobalExceptionHandler {
                 HttpStatus.UNAUTHORIZED.value(),
                 "Invalid username or password, bro."
         );
+        log.info("{}", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.UNAUTHORIZED);
     }
 
@@ -113,23 +117,26 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex) {
-        // Collect all field errors into a single string
-        // Example output: "Validation failed: email - Invalid email format; password - must be at least 6 chars; "
+        // 1. Ασφαλές Logging (χωρίς να ζητάμε principal στην παράμετρο)
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String userId = "anonymous";
+        if (auth != null && auth.getPrincipal() instanceof CustomPrincipal p) {
+            userId = String.valueOf(p.id());
+        }
+        log.warn("Validation failed for user {}: {}", userId, ex.getMessage());
+
+        // 2. Υπόλοιπη λογική
         String errorMessage = "Validation failed: " + ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + " - " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
 
-        // Create the response
-        ErrorResponse error = new ErrorResponse(
-                HttpStatus.BAD_REQUEST.value(),
-                errorMessage
-        );
-
+        ErrorResponse error = new ErrorResponse(HttpStatus.BAD_REQUEST.value(), errorMessage);
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        assert ex.getRequiredType() != null;
         String message = String.format("Invalid value '%s' for parameter '%s'. Expected type: %s",
                 ex.getValue(), ex.getName(), ex.getRequiredType().getSimpleName());
 
@@ -146,6 +153,15 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 "Malformed JSON request. Please check your request body syntax."
         );
+        log.info("{}", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    private Long getCurrentUserIdSafely() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof CustomPrincipal principal) {
+            return principal.id();
+        }
+        return null; // Ή 0L για ανώνυμο χρήστη
     }
 }

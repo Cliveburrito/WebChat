@@ -12,12 +12,6 @@ import java.util.Optional;
 @Repository
 public interface AttachmentRepository extends JpaRepository<Attachment, Integer> {
 
-    // for the file history
-    List<Attachment> findByConversationConversationID(Long conversationId);
-
-    // for the user to see his files
-    List<Attachment> findByUploadedById(Long userId);
-
     @Query("SELECT a FROM Attachment a JOIN FETCH a.uploadedBy WHERE a.storageName = :storageName")
     Optional<Attachment> findByStorageNameWithUploader(@Param("storageName") String storageName);
 }

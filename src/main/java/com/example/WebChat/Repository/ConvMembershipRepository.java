@@ -10,16 +10,23 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ConvMembershipRepository extends JpaRepository<ConvMembership, Long> {
-    List<ConvMembership> findAllByUser_Id(
-            Long userId);
+    @Query("SELECT m1.conversation.conversationID " +
+            "FROM ConvMembership m1 " +
+            "JOIN ConvMembership m2 ON m1.conversation.conversationID = m2.conversation.conversationID " +
+            "WHERE m1.user.id = :user1Id " +
+            "AND m2.user.id = :user2Id " +
+            "AND m1.conversation.isGroup = false")
+    Optional<Long> findExistingDirectChatId(@Param("user1Id") Long user1Id,
+                                            @Param("user2Id") Long user2Id);
 
-    boolean existsByUser_IdAndConversation_ConversationID(
-            Long userId, Long conversationId);
-
-    boolean existsByUser_UsernameAndConversation_ConversationID(
-            String username, Long conversationId);
+    @Query("SELECT COUNT(m) > 0 FROM ConvMembership m " +
+            "WHERE m.user.id = :userId " +
+            "AND m.conversation.conversationID = :convId")
+    boolean existsByUserIdAndConvId(@Param("userId") Long userId,
+                                    @Param("convId") Long convId);
 
     @Query(value = """
 SELECT
@@ -80,19 +87,14 @@ ORDER BY lm.sent_at DESC NULLS LAST
     void incrementUnreadCountForOthers(@Param("convId") Long convId, @Param("senderId") Long senderId);
 
     @Modifying
-    @Transactional
-    @Query("""
-        UPDATE ConvMembership cm
-        SET cm.unreadCount = 0
-        WHERE cm.conversation.conversationID = :convId
-          AND cm.user.username = :username
-          AND cm.unreadCount > 0
-    """)
-    void resetUnreadCount(@Param("convId") Long convId, @Param("username") String username);
+    @Query("UPDATE ConvMembership cm SET cm.unreadCount = 0 " +
+            "WHERE cm.conversation.conversationID = :convId AND cm.user.id = :userId")
+    void resetUnreadCount(@Param("convId") Long convId, @Param("userId") Long userId);
 
     @Modifying
-    @Query(value = "UPDATE ConvMembership cm SET cm.muted = :status " +
-            "WHERE cm.conversation.conversationID = :convId AND cm.user.username = :username")
-    void toggleMute(@Param("username") String username, @Param("convId") Long convId, @Param("status") boolean status);
+    @Transactional
+    @Query("UPDATE ConvMembership cm SET cm.muted = :status " +
+            "WHERE cm.conversation.conversationID = :convId AND cm.user.id = :userId")
+    void toggleMute(@Param("userId") Long userId, @Param("convId") Long convId, @Param("status") boolean status);
 }
 
