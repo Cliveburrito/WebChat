@@ -1,5 +1,4 @@
 import Avatar from "../common/Avatar";
-import { Check, CheckCheck } from "lucide-react";
 import "./ChatListItem.css";
 
 const SidebarStatus = ({ chat, watermarks, currentUserId }) => {
@@ -15,9 +14,9 @@ const SidebarStatus = ({ chat, watermarks, currentUserId }) => {
         if (status.lastDeliveredId > maxDelivered) maxDelivered = status.lastDeliveredId;
     });
 
-    if (chat.lastMessageId <= maxRead) return <CheckCheck size={16} className="status-icon read" />;
-    if (chat.lastMessageId <= maxDelivered) return <CheckCheck size={16} className="status-icon delivered" />;
-    return <Check size={16} className="status-icon sent" />;
+    if (chat.lastMessageId <= maxRead) return <span className="status-icon read" aria-label="read">✓✓</span>;
+    if (chat.lastMessageId <= maxDelivered) return <span className="status-icon delivered" aria-label="delivered">✓✓</span>;
+    return <span className="status-icon sent" aria-label="sent">✓</span>;
 };
 
 export default function ChatListItem({ chat, activeChat, onSelectChat, onlineUsers, watermarks, currentUserId }) {
@@ -25,7 +24,7 @@ export default function ChatListItem({ chat, activeChat, onSelectChat, onlineUse
     const cid = chat.conversationId || chat.id;
     const isActive = (activeChat?.conversationId || activeChat?.id) === cid;
 
-    const isDirect = chat.name && !chat.name.includes(", ");
+    const isDirect = chat.isGroup === false;
     const isOnline = isDirect && onlineUsers.includes(chatTitle);
 
     const timeDisplay = chat.lastMessageAt

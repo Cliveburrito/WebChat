@@ -1,4 +1,3 @@
-import { Check, CheckCheck, Clock } from "lucide-react";
 import "./MessageBubble.css";
 
 // --- Υπο-component για τα Ticks ---
@@ -6,7 +5,7 @@ const MessageStatus = ({ msg, chatWatermarks }) => {
     // 1. Έλεγχος για Temp ID (Pending / Uploading)
     // Αν το ID δεν είναι αριθμός ή ξεκινάει με "temp-", δείχνουμε ρολόι
     if (!msg.id || String(msg.id).startsWith("temp-") || String(msg.id).startsWith("evt-")) {
-        return <Clock size={14} className="status-icon pending" />;
+        return <span className="status-icon pending" aria-label="pending">⏳</span>;
     }
 
     // 2. Υπολογισμός Max Read/Delivered από τους άλλους χρήστες
@@ -21,14 +20,14 @@ const MessageStatus = ({ msg, chatWatermarks }) => {
 
     // 3. Logic Comparison
     if (msg.id <= maxReadId) {
-        return <CheckCheck size={16} className="status-icon read" />; // Μπλε Διπλό
+        return <span className="status-icon read" aria-label="read">✓✓</span>; // Μπλε Διπλό
     }
     if (msg.id <= maxDeliveredId) {
-        return <CheckCheck size={16} className="status-icon delivered" />; // Γκρι Διπλό
+        return <span className="status-icon delivered" aria-label="delivered">✓✓</span>; // Γκρι Διπλό
     }
 
     // 4. Default: Sent to Server (Μονό Γκρι)
-    return <Check size={16} className="status-icon sent" />;
+    return <span className="status-icon sent" aria-label="sent">✓</span>;
 };
 
 export default function MessageBubble({ msg, currentUser, chatWatermarks }) {
