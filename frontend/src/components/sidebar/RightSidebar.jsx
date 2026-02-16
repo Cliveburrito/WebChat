@@ -1,24 +1,19 @@
-import PresenceDot from "../presence/PresenceDot";
+import Avatar from "../common/Avatar"; // Το ".." βγαίνει από το sidebar και μπαίνει στο common
 
 export default function RightSidebar({ users, currentUser, onOpenDirectChat, onlineUsers = [] }) {
     return (
         <aside className="sidebar right">
             <div className="sidebar-section">
-                <h4 className="sidebar-title">All Users</h4>
+                <h4 className="sidebar-title">Global Directory</h4>
                 <div className="sidebar-list">
                     {users.filter(u => u.username !== currentUser).map(u => {
                         const isOnline = onlineUsers.includes(u.username);
                         return (
-                            <div
-                                key={u.id}
-                                className="item"
-                                onClick={() => onOpenDirectChat(u.id)}
-                                style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "10px" }}
-                            >
-                                <PresenceDot online={isOnline} />
-                                <div style={{ display: "flex", flexDirection: "column" }}>
-                                    <strong>{u.username}</strong>
-                                    <small>{u.email}</small>
+                            <div key={u.id} className="chat-item" onClick={() => onOpenDirectChat(u.id)}>
+                                <Avatar name={u.username} isOnline={isOnline} size={40} />
+                                <div className="chat-item-info">
+                                    <span className="chat-item-name">{u.username}</span>
+                                    <small className="preview-text">{u.email}</small>
                                 </div>
                             </div>
                         );

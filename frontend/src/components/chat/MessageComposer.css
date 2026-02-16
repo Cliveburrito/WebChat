@@ -1,0 +1,111 @@
+.composer-container {
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border-color);
+    padding: 10px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Τα "Chips" των αρχείων που εμφανίζονται πάνω από το input */
+.composer-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-bottom: 5px;
+}
+
+.composer-file-chip {
+    background: var(--bg-main);
+    border: 1px solid var(--primary-blue);
+    padding: 4px 10px;
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+}
+
+.composer-file-chip button {
+    background: none;
+    border: none;
+    color: #ff4d4d;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* Η κύρια γραμμή του input */
+.input-row {
+    display: flex;
+    align-items: flex-end; /* Για να μεγαλώνει η textarea προς τα πάνω */
+    gap: 12px;
+}
+
+/* Το κουμπί "+" */
+.attach-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: var(--primary-blue);
+    cursor: pointer;
+    transition: background 0.2s;
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.attach-btn:hover {
+    background: rgba(0, 132, 255, 0.1);
+}
+
+/* Η Textarea (WhatsApp style) */
+.main-input {
+    flex: 1;
+    background: var(--bg-main);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 10px 15px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    resize: none;
+    max-height: 120px;
+    outline: none;
+    line-height: 1.4;
+}
+
+.main-input:focus {
+    border-color: var(--primary-blue);
+}
+
+/* Το κουμπί αποστολής ➤ */
+.send-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--primary-blue);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    transition: transform 0.2s, opacity 0.2s;
+    flex-shrink: 0;
+}
+
+.send-btn:hover:not(.disabled) {
+    transform: scale(1.05);
+    background: #0073e6;
+}
+
+.send-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--text-secondary);
+}

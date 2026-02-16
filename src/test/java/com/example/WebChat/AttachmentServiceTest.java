@@ -78,8 +78,6 @@ class AttachmentServiceTest {
             );
             List<MultipartFile> files = List.of(file1, file2);
 
-            when(rateLimiter.resolveFileBucket(USER_ID)).thenReturn(bucket);
-            when(bucket.tryConsume(2)).thenReturn(true);
 
             String storageName1 = "uuid-111.jpg";
             String storageName2 = "uuid-222.pdf";
@@ -103,36 +101,12 @@ class AttachmentServiceTest {
             assertThat(capturedTask.originalNames()).containsExactly("test1.jpg", "test2.pdf");
         }
 
-        @Test
-        @DisplayName("Should throw RateLimitExceeded when limit exceeded")
-        void shouldThrowWhenRateLimitExceeded() {
-            // Given
-            MockMultipartFile file1 = new MockMultipartFile("file1", "test.jpg", "image/jpeg", "content".getBytes());
-            MockMultipartFile file2 = new MockMultipartFile("file2", "test2.jpg", "image/jpeg", "content2".getBytes());
-            List<MultipartFile> files = List.of(file1, file2);
-            FileLinkTask task = new FileLinkTask(1L, 1L , List.of("storage"), List.of("real"));
-
-            when(rateLimiter.resolveFileBucket(USER_ID)).thenReturn(bucket);
-            when(bucket.tryConsume(2)).thenReturn(false);
-
-            // When/Then
-            assertThatThrownBy(() ->
-                    attachmentService.handleAsyncUpload(files, MESSAGE_ID, CONVERSATION_ID, USER_ID))
-                    .isInstanceOf(RateLimitExceededException.class)
-                    .hasMessageContaining("File upload limit reached");
-
-            verify(storageService, never()).store(any());
-            verify(rabbitTemplate, never()).convertAndSend(RabbitMQConfig.CHAT_EXCHANGE, RabbitMQConfig.FILE_LINK_ROUTING_KEY, task);
-        }
 
         @Test
         @DisplayName("Should handle empty file list")
         void shouldHandleEmptyFileList() {
             // Given
             List<MultipartFile> emptyFiles = List.of();
-
-            when(rateLimiter.resolveFileBucket(USER_ID)).thenReturn(bucket);
-            when(bucket.tryConsume(0)).thenReturn(true);
 
             // When
             attachmentService.handleAsyncUpload(emptyFiles, MESSAGE_ID, CONVERSATION_ID, USER_ID);
@@ -161,8 +135,6 @@ class AttachmentServiceTest {
             );
             List<MultipartFile> files = List.of(file);
 
-            when(rateLimiter.resolveFileBucket(USER_ID)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
             when(storageService.store(file)).thenReturn(STORAGE_NAME);
 
             // When

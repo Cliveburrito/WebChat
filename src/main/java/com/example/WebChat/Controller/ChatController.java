@@ -2,7 +2,10 @@ package com.example.WebChat.Controller;
 
 import com.example.WebChat.DTO.ChatMessageRequest;
 import com.example.WebChat.DTO.CustomPrincipal;
+import com.example.WebChat.DTO.MessageAckDTO;
+import com.example.WebChat.DTO.WatermarkUpdateEvent;
 import com.example.WebChat.Service.MessageService;
+import com.example.WebChat.Service.RateLimiterService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +22,7 @@ import org.springframework.web.bind.annotation.*;
 @Controller // Use @Controller for hybrid classes
 @RequiredArgsConstructor
 public class ChatController {
-
+    private final RateLimiterService rateLimiter;
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
     /**
@@ -43,6 +46,23 @@ public class ChatController {
             // This saves the message and broadcasts it back to /topic/chat/{conversationId}
             messageService.processAndSend(principal.id(), principal.username(), conversationId, request.content(), request.tempId());
         }
+    }
+
+    @MessageMapping("/chat.ack")
+    public void processAck(@Payload MessageAckDTO ack, @AuthenticationPrincipal CustomPrincipal principal) {
+        // 2. BROADCAST to the conversation topic
+        // This notifies the SENDER (and other members) to turn their ticks blue/grey
+        WatermarkUpdateEvent update = new WatermarkUpdateEvent(
+                ack.conversationId(),
+                principal.id(),
+                ack.messageId(),
+                ack.type()
+        );
+        log.info("ACK RECEIVED");
+
+        messageService.handleMessageAck(update);
+
+        messagingTemplate.convertAndSend("/topic/chat/" + ack.conversationId(), update);
     }
 
     /**
@@ -69,6 +89,7 @@ public class ChatController {
             @PathVariable Long id,
             @RequestBody ChatMessageRequest body // Use the Request DTO (content + tempId)
     ) {
+        rateLimiter.consumeMessageOrThrow(principal.id(), principal.username(), id);
         // Kick off the Async flow
         messageService.processAndSend(principal.id(), principal.username(), id, body.content(), body.tempId());
 

@@ -49,8 +49,9 @@ public class ConvMembership {
     private boolean muted;
     private boolean notificationsOn;
 
-    // to show the number of unread messages :)
-    @Builder.Default
-    @Column(nullable = false)
-    private int unreadCount = 0;
+    @Column(name = "last_delivered_message_id")
+    private Long lastDeliveredMessageId = 0L;
+
+    @Column(name = "last_read_message_id")
+    private Long lastReadMessageId = 0L;
 }

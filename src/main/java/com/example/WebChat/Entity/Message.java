@@ -3,7 +3,6 @@ package com.example.WebChat.Entity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -38,7 +37,7 @@ public class Message {
 
     /**
      * Reference to the USER who sent this message.
-     *
+     * <p>
      * Many messages can be sent by the SAME user -> ManyToOne.
      * JPA will create a foreign key column named "sender_id" in the "messages" table.
      */
@@ -49,7 +48,7 @@ public class Message {
 
     /**
      * Reference to the CONVERSATION this message belongs to.
-     *
+     * <p>
      * Many messages belong to the SAME conversation -> ManyToOne.
      * JPA will create a foreign key column named "conversation_id" in the "messages" table.
      */
@@ -59,5 +58,5 @@ public class Message {
 
     @OneToMany(mappedBy = "message", cascade = CascadeType.ALL)
     @org.hibernate.annotations.BatchSize(size = 20) // <--- ΠΡΟΣΘΕΣΕ ΑΥΤΟ
-    private List<Attachment> attachments = new ArrayList<>();
+    private List<Attachment> attachments;
 }

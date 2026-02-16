@@ -22,9 +22,11 @@ public class RabbitMQConfig {
 
     // The name of the queue where chat messages will be stored before consumption
     public static final String CHAT_QUEUE = "chat.messages.queue";
+    public static final String WATERMARK_QUEUE = "chat.watermark.queue";
 
     // The specific key used to route messages from the exchange to this specific queue
     public static final String CHAT_ROUTING_KEY = "chat.message.routingKey";
+    public static final String WATERMARK_ROUTING_KEY = "chat.watermark.routingKey";
 
     public static final String FILE_LINK_QUEUE = "chat.files.link.queue";
     public static final String FILE_LINK_ROUTING_KEY = "chat.files.link.routingKey";
@@ -64,9 +66,20 @@ public class RabbitMQConfig {
         return new Queue(FILE_LINK_QUEUE, true);
     }
 
+
     @Bean
     public Binding fileBinding(Queue fileLinkQueue, TopicExchange chatExchange) {
         return BindingBuilder.bind(fileLinkQueue).to(chatExchange).with(FILE_LINK_ROUTING_KEY);
+    }
+
+    @Bean
+    public Queue watermarkQueue() {
+        return new Queue(WATERMARK_QUEUE, true);
+    }
+
+    @Bean
+    public Binding watermarkBinding(Queue watermarkQueue, TopicExchange chatExchange) {
+        return BindingBuilder.bind(watermarkQueue).to(chatExchange).with(WATERMARK_ROUTING_KEY);
     }
 
     /**
@@ -78,5 +91,12 @@ public class RabbitMQConfig {
     @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
+    }
+
+    @Bean
+    public org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate(org.springframework.amqp.rabbit.connection.ConnectionFactory connectionFactory) {
+        org.springframework.amqp.rabbit.core.RabbitTemplate template = new org.springframework.amqp.rabbit.core.RabbitTemplate(connectionFactory);
+        template.setMessageConverter(jsonMessageConverter());
+        return template;
     }
 }

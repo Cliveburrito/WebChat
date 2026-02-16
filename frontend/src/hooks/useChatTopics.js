@@ -8,25 +8,39 @@ export function useChatTopics({
                                   setMessages,
                                   bumpConversation,
                                   markChatRead,
+                                  onWatermarkUpdate, // <--- Η νέα προσθήκη για τα live ticks
                                   debug = true,
                               }) {
     const subsRef = useRef(new Map());
 
-    // Χρησιμοποιούμε Refs για να "κλέβουμε" τις τελευταίες τιμές χωρίς να πυροδοτούμε το useEffect
-    const callbacksRef = useRef({ bumpConversation, markChatRead, setMessages, activeChatId, currentUser });
-
-    useEffect(() => {
-        callbacksRef.current = { bumpConversation, markChatRead, setMessages, activeChatId, currentUser };
+    // Προσθέτουμε το onWatermarkUpdate στο callbacksRef για να το έχουμε φρέσκο
+    const callbacksRef = useRef({
+        bumpConversation,
+        markChatRead,
+        setMessages,
+        onWatermarkUpdate,
+        activeChatId,
+        currentUser
     });
 
-    // Δημιουργούμε ένα memoized string από IDs.
-    // Το useEffect θα ξανατρέξει ΜΟΝΟ αν προστεθεί ή αφαιρεθεί συνομιλία (π.χ. νέο group).
+    useEffect(() => {
+        callbacksRef.current = {
+            bumpConversation,
+            markChatRead,
+            setMessages,
+            onWatermarkUpdate,
+            activeChatId,
+            currentUser
+        };
+    });
+
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const conversationIdsKey = useMemo(() => {
         return (conversations || [])
             .map((c) => String(c.conversationId ?? c.id))
             .sort()
             .join(",");
-    }, [conversations.length]); // Τρέχει μόνο όταν αλλάζει ο αριθμός των chats
+    }, [conversations.length]);
 
     useEffect(() => {
         if (!stompClient?.connected) return;
@@ -41,9 +55,10 @@ export function useChatTopics({
                 let payload;
                 try {
                     payload = JSON.parse(frame.body);
+                    // eslint-disable-next-line no-unused-vars
                 } catch (e) { return; }
 
-                // 1) Message Confirmation
+                // 1) Message Confirmation (tempId -> realId)
                 if (payload?.tempId && payload?.realId) {
                     callbacksRef.current.setMessages?.((prev) =>
                         prev.map((m) => String(m.id) === String(payload.tempId)
@@ -54,7 +69,15 @@ export function useChatTopics({
                     return;
                 }
 
-                // 2) Attachment Linked
+                // 2) Watermark Update (READ / DELIVERED ticks) - ΝΕΟ!
+                // Αυτό έρχεται όταν ο άλλος χρήστης στέλνει Ack
+                if (payload?.type === "READ" || payload?.type === "DELIVERED") {
+                    if (debug) console.debug("Watermark Update received:", payload);
+                    callbacksRef.current.onWatermarkUpdate?.(payload);
+                    return;
+                }
+
+                // 3) Attachment Linked
                 if (payload?.messageId && payload?.attachments) {
                     callbacksRef.current.setMessages?.((prev) =>
                         prev.map((m) => String(m.id) === String(payload.messageId)
@@ -65,14 +88,15 @@ export function useChatTopics({
                     return;
                 }
 
-                // 3) New Message Event
+                // 4) New Message Event
                 if (payload?.senderName) {
                     const convId = String(payload.conversationId ?? id);
                     const isIncoming = payload.senderName !== callbacksRef.current.currentUser;
                     const isActive = String(callbacksRef.current.activeChatId ?? "") === convId;
 
                     const msgDto = {
-                        id: payload.tempId || `evt-${Date.now()}`,
+                        // Αν το payload έχει id, το χρησιμοποιούμε (realId), αλλιώς temp
+                        id: payload.id || payload.tempId || `evt-${Date.now()}`,
                         conversationId: convId,
                         senderUsername: payload.senderName,
                         content: payload.content ?? "",
@@ -91,7 +115,12 @@ export function useChatTopics({
                             if (prev.some((m) => String(m.id) === String(msgDto.id))) return prev;
                             return [...prev, msgDto];
                         });
-                        if (isIncoming) callbacksRef.current.markChatRead?.(convId);
+
+                        // Αν είμαστε ήδη στο chat, στέλνουμε το σήμα "READ" αμέσως
+                        // Πλέον περνάμε και το msgDto.id για να ξέρει ο server το ακριβές watermark
+                        if (isIncoming) {
+                            callbacksRef.current.markChatRead?.(convId, msgDto.id);
+                        }
                     }
                 }
             });
@@ -100,12 +129,11 @@ export function useChatTopics({
             if (debug) console.debug("Subscribed to chat:", id);
         }
 
-        // Cleanup για συνομιλίες που αφαιρέθηκαν
         for (const [id, sub] of subsRef.current.entries()) {
             if (!ids.includes(id)) {
                 sub.unsubscribe();
                 subsRef.current.delete(id);
             }
         }
-    }, [stompClient?.connected, conversationIdsKey]); // ΠΟΤΕ δεν βάζουμε το 'conversations' εδώ
+    }, [stompClient?.connected, conversationIdsKey]);
 }

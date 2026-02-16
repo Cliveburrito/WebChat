@@ -1,0 +1,32 @@
+.chat-area {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: #e5ddd5; /* Classic chat background */
+    background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+    background-repeat: repeat;
+    position: relative;
+}
+
+.messages-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Load More Button Styling */
+.load-more-btn {
+    align-self: center;
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid #ddd;
+    padding: 6px 15px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: all 0.2s;
+}
+.load-more-btn:hover { background: white; }

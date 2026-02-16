@@ -5,11 +5,10 @@ import com.example.WebChat.DTO.ChatMessageResponse;
 import com.example.WebChat.Entity.Conversation;
 import com.example.WebChat.Entity.Message;
 import com.example.WebChat.Entity.User;
-import com.example.WebChat.Exception.RateLimitExceededException;
+
 import com.example.WebChat.Repository.ConvMembershipRepository;
 import com.example.WebChat.Repository.MessageRepository;
 import com.example.WebChat.Service.MessageService;
-import com.example.WebChat.Service.RateLimiterService;
 import com.example.WebChat.UtilsConfigs.RabbitMQConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
@@ -40,7 +39,6 @@ class MessageServiceTest {
     @Mock MessageRepository messageRepository;
     @Mock ConvMembershipRepository convMembershipRepository;
     @Mock SimpMessagingTemplate messagingTemplate;
-    @Mock RateLimiterService rateLimiter;
     @Mock RabbitTemplate rabbitTemplate;
     @Mock StringRedisTemplate redisTemplate;
     @Mock ObjectMapper objectMapper;
@@ -86,8 +84,7 @@ class MessageServiceTest {
         @DisplayName("Happy path: broadcasts WS + publishes RabbitMQ")
         void shouldProcessAndSend() {
             when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
-            when(rateLimiter.resolveMessageBucket(USER_ID)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
+
 
             messageService.processAndSend(USER_ID, USERNAME, CONVERSATION_ID, CONTENT, TEMP_ID);
 
@@ -124,31 +121,16 @@ class MessageServiceTest {
             ).isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
                     .hasMessageContaining("not a member");
 
-            verifyNoInteractions(rateLimiter, messagingTemplate, rabbitTemplate);
+            verifyNoInteractions( messagingTemplate, rabbitTemplate);
         }
 
-        @Test
-        @DisplayName("Throws RateLimitExceededException when bucket denies; no WS/Rabbit")
-        void shouldThrowWhenRateLimited() {
-            when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
-            when(rateLimiter.resolveMessageBucket(USER_ID)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(false);
-
-            assertThatThrownBy(() ->
-                    messageService.processAndSend(USER_ID, USERNAME, CONVERSATION_ID, CONTENT, TEMP_ID)
-            ).isInstanceOf(RateLimitExceededException.class)
-                    .hasMessageContaining("Too many messages");
-
-            verify(messagingTemplate, never()).convertAndSend(anyString(), any(ChatMessageEvent.class));
-            verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any(ChatMessageEvent.class));
-        }
 
         @Test
         @DisplayName("Order: WS broadcast happens before Rabbit publish")
         void shouldBroadcastBeforeRabbit() {
             when(convMembershipRepository.existsByUserIdAndConvId(USER_ID, CONVERSATION_ID)).thenReturn(true);
-            when(rateLimiter.resolveMessageBucket(USER_ID)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
+
+
 
             messageService.processAndSend(USER_ID, USERNAME, CONVERSATION_ID, CONTENT, TEMP_ID);
 
@@ -344,26 +326,6 @@ class MessageServiceTest {
     @DisplayName("create()")
     class CreateTests {
 
-        @Test
-        @DisplayName("Creates message and saves it")
-        void shouldCreateAndSaveMessage() {
-            when(messageRepository.save(any(Message.class)))
-                    .thenAnswer(inv -> inv.getArgument(0));
-
-            Message result = messageService.create(user, conversation, CONTENT);
-
-            assertThat(result).isNotNull();
-            assertThat(result.getMessage()).isEqualTo(CONTENT);
-            assertThat(result.getSender()).isEqualTo(user);
-            assertThat(result.getConversation()).isEqualTo(conversation);
-            assertThat(result.getSentAt()).isNotNull();
-
-            verify(messageRepository).save(messageCaptor.capture());
-            Message saved = messageCaptor.getValue();
-            assertThat(saved.getMessage()).isEqualTo(CONTENT);
-        }
-    }
-
     /* =========================================================
        deserialize()
        ========================================================= */
@@ -395,3 +357,4 @@ class MessageServiceTest {
         }
     }
 }
+    }

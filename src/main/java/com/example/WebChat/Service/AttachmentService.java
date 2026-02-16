@@ -34,14 +34,6 @@ public class AttachmentService {
     }
 
     public void handleAsyncUpload(List<MultipartFile> files, Long messageId, Long conversationId, Long id) {
-        Bucket bucket = rateLimiter.resolveFileBucket(id);
-
-        // We consume tokens based on the NUMBER of files
-        if (!bucket.tryConsume(files.size())) {
-            log.warn("User {} is attempting to upload too many files!", id);
-            throw new RateLimitExceededException("File upload limit reached. Please wait a minute.");
-        }
-
         // Physical Storage (Outside Transaction)
         List<String> storageNames = files.stream()
                 .map(storageService::store) // Save to disk

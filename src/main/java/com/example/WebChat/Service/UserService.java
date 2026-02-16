@@ -30,12 +30,7 @@
         private final PresenceService presenceService;
 
         public JwtAuthenticationResponse register(RegisterUserRequest request, String ipAddress) {
-            Bucket bucket = rateLimiter.resolveAuthBucket(ipAddress);
 
-            if(!bucket.tryConsume(1)) {
-                log.warn("Too many register attempts from ip: {}", ipAddress);
-                throw new RateLimitExceededException("Too many requests. Please try again in a bit.");
-            }
             if (userRepository.existsByUsername(request.username())) {
                 throw new UserAlreadyExistsException("Username already in use");
             }
@@ -71,12 +66,6 @@
 
 
         public JwtAuthenticationResponse login(LoginUserRequest request, String ipAddress) {
-            Bucket bucket = rateLimiter.resolveAuthBucket(ipAddress);
-            if (!bucket.tryConsume(1)) {
-                log.warn("Too many login attempts from ip: {}", ipAddress);
-                throw new RateLimitExceededException("Too many requests.");
-            }
-
             // Authenticate - This calls loadUserByUsername and puts CachedUser in the result
             var authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.username(), request.password())

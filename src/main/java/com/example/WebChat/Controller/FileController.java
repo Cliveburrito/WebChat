@@ -4,6 +4,7 @@ import com.example.WebChat.DTO.AttachmentDTO;
 import com.example.WebChat.DTO.CustomPrincipal;
 import com.example.WebChat.Service.AttachmentService;
 import com.example.WebChat.Service.FileSystemStorageService;
+import com.example.WebChat.Service.RateLimiterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -19,6 +20,7 @@ import java.util.List;
 public class FileController {
     private final AttachmentService attachmentService;
     private final FileSystemStorageService storageService;
+    private final RateLimiterService rateLimiter;
 
     @PostMapping("/upload")
     public ResponseEntity<Void> handleFileUpload(
@@ -27,6 +29,7 @@ public class FileController {
             @RequestParam("messageId") Long messageId,
             @AuthenticationPrincipal CustomPrincipal principal) {
 
+        rateLimiter.consumeFileOrThrow(principal.id(), principal.username(), files.size(), conversationId, messageId);
 
         attachmentService.handleAsyncUpload(files, messageId, conversationId, principal.id() );
         return ResponseEntity.accepted().build();

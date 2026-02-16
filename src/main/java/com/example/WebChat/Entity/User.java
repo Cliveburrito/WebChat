@@ -32,12 +32,12 @@ public class User implements Serializable {
     private Instant createdAt;
 
     @Column(nullable = false)
-    private boolean enabled = true;
+    private boolean enabled;
 
     private Instant lastSeenAt;
 
     private String avatarUrl;
 
     @Column(nullable = false)
-    private boolean stealthMode = false;
+    private boolean stealthMode;
 }

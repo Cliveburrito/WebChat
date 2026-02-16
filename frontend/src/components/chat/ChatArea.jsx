@@ -3,10 +3,11 @@ import ChatHeader from "./ChatHeader";
 import MessagesPanel from "./MessagesPanel";
 import MessageComposer from "./MessageComposer";
 import { apiForm } from "../../api/apiJson";
+import "./ChatArea.css";
 
 const STOP_TYPING = "__STOP__";
-const REMOTE_LINGER_MS = 1500;   // πόσο να μένει το indicator χωρίς νέα events
-const LOCAL_THROTTLE_MS = 1200; // πόσο συχνά στέλνουμε typing
+const REMOTE_LINGER_MS = 1500;
+const LOCAL_THROTTLE_MS = 1200;
 
 export default function ChatArea({
                                      activeChat,
@@ -19,29 +20,71 @@ export default function ChatArea({
                                      onMessageSent,
                                      stompClient,
                                      onToggleMute,
+                                     watermarks
                                  }) {
+    // --- States ---
     const [text, setText] = useState("");
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [typingUser, setTypingUser] = useState(null);
 
-    const pendingUploadsRef = useRef(new Map());
-
+    // --- Refs για Scrolling & UI Logic ---
     const scrollRef = useRef(null);
     const prevScrollHeightRef = useRef(0);
     const isPrependingRef = useRef(false);
     const shouldAutoScrollRef = useRef(true);
 
+    // --- Refs για Typing & Uploads ---
+    const pendingUploadsRef = useRef(new Map());
     const typingCooldownRef = useRef(null);
     const remoteTypingTimerRef = useRef(null);
 
+    // --- Derived Values ---
     const chatId = activeChat?.conversationId || activeChat?.id;
     const isConnected = !!stompClient?.connected;
 
+    // --- 🟢 SCROLL LOGIC (The Fix) ---
     const isNearBottom = (el) => {
-        const threshold = 100;
+        const threshold = 150;
         return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
     };
 
+    const handleScroll = useCallback(() => {
+        if (scrollRef.current) {
+            shouldAutoScrollRef.current = isNearBottom(scrollRef.current);
+
+            // Προαιρετικό: Αυτόματο load more αν ο χρήστης φτάσει στην κορυφή
+            if (scrollRef.current.scrollTop <= 5 && hasMore && !isPrependingRef.current) {
+                handleLoadMore();
+            }
+        }
+    }, [hasMore]);
+
+    useLayoutEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+
+        if (isPrependingRef.current) {
+            // Κλειδώνουμε το scroll στη θέση που ήταν πριν έρθουν τα παλιά μηνύματα
+            const heightDifference = el.scrollHeight - prevScrollHeightRef.current;
+            el.scrollTop = heightDifference;
+            isPrependingRef.current = false;
+        } else if (shouldAutoScrollRef.current) {
+            // Scroll στον πάτο για νέα μηνύματα
+            el.scrollTop = el.scrollHeight;
+        }
+    }, [messages]);
+
+    const handleLoadMore = useCallback(() => {
+        if (!hasMore || !scrollRef.current || isPrependingRef.current) return;
+
+        prevScrollHeightRef.current = scrollRef.current.scrollHeight;
+        isPrependingRef.current = true;
+        shouldAutoScrollRef.current = false;
+
+        onLoadMore?.();
+    }, [hasMore, onLoadMore]);
+
+    // --- 🟡 TYPING LOGIC ---
     const clearRemoteTyping = useCallback(() => {
         setTypingUser(null);
         if (remoteTypingTimerRef.current) {
@@ -50,48 +93,31 @@ export default function ChatArea({
         }
     }, []);
 
-    const publishTyping = useCallback(
-        (payload) => {
-            if (!isConnected || !chatId) return;
-            try {
-                stompClient.publish({
-                    destination: `/app/chat/${chatId}/typing`,
-                    body: payload,
-                });
-            } catch (e) {
-                console.debug("typing publish failed:", e);
-            }
-        },
-        [isConnected, chatId, stompClient]
-    );
+    const publishTyping = useCallback((payload) => {
+        if (!isConnected || !chatId) return;
+        try {
+            stompClient.publish({
+                destination: `/app/chat/${chatId}/typing`,
+                body: payload,
+            });
+        } catch (e) { console.error("Typing publish failed", e); }
+    }, [isConnected, chatId, stompClient]);
 
-    // Subscribe to typing events
     useEffect(() => {
         if (!isConnected || !chatId) {
             clearRemoteTyping();
             return;
         }
 
-        const topic = `/topic/chat/${chatId}/typing`;
-        const sub = stompClient.subscribe(topic, (frame) => {
+        const sub = stompClient.subscribe(`/topic/chat/${chatId}/typing`, (frame) => {
             const body = String(frame.body ?? "").trim();
-
-            // STOP or empty => clear typing immediately
-            if (!body || body === STOP_TYPING) {
+            if (!body || body === STOP_TYPING || body === currentUser) {
                 clearRemoteTyping();
                 return;
             }
-
-            // ignore my own typing echoes
-            if (body === currentUser) return;
-
             setTypingUser(body);
-
             if (remoteTypingTimerRef.current) clearTimeout(remoteTypingTimerRef.current);
-            remoteTypingTimerRef.current = setTimeout(() => {
-                setTypingUser(null);
-                remoteTypingTimerRef.current = null;
-            }, REMOTE_LINGER_MS);
+            remoteTypingTimerRef.current = setTimeout(clearRemoteTyping, REMOTE_LINGER_MS);
         });
 
         return () => {
@@ -100,102 +126,40 @@ export default function ChatArea({
         };
     }, [isConnected, chatId, stompClient, currentUser, clearRemoteTyping]);
 
-    // Reset local UI on chat change
-    useEffect(() => {
-        setText("");
-        setSelectedFiles([]);
-        clearRemoteTyping();
-        shouldAutoScrollRef.current = true;
-        isPrependingRef.current = false;
-
-        if (typingCooldownRef.current) {
-            clearTimeout(typingCooldownRef.current);
-            typingCooldownRef.current = null;
-        }
-    }, [chatId, clearRemoteTyping]);
-
-    // ✅ Super reliable: if a message arrives from someone else, they are not typing
-    useEffect(() => {
-        if (!chatId || !messages?.length) return;
-        const last = messages[messages.length - 1];
-        if (last?.senderUsername && last.senderUsername !== currentUser) {
-            clearRemoteTyping();
-        }
-    }, [messages, chatId, currentUser, clearRemoteTyping]);
-
-    // Attachment upload after message confirmation
+    // --- 🔵 ATTACHMENT LOGIC ---
     useEffect(() => {
         const pendingEntries = [...pendingUploadsRef.current.entries()];
         if (!pendingEntries.length) return;
 
-        for (const [tempId, pending] of pendingEntries) {
-            const confirmed = messages.find(
-                (m) => String(m.clientTempId || "") === String(tempId) && String(m.id) !== String(tempId)
-            );
-            const messageId = confirmed?.id;
-
-            if (!messageId || String(messageId).startsWith("temp-")) continue;
+        pendingEntries.forEach(async ([tempId, pending]) => {
+            const confirmed = messages.find(m => m.clientTempId === tempId && !String(m.id).startsWith('temp-'));
+            if (!confirmed) return;
 
             pendingUploadsRef.current.delete(tempId);
+            const formData = new FormData();
+            pending.files.forEach(f => formData.append("file", f));
+            formData.append("conversationId", String(pending.conversationId));
+            formData.append("messageId", String(confirmed.id));
 
-            (async () => {
-                const formData = new FormData();
-                pending.files.forEach((f) => formData.append("file", f));
-                formData.append("conversationId", String(pending.conversationId));
-                formData.append("messageId", String(messageId));
-
-                try {
-                    await apiForm("/api/files/upload", { token, formData });
-                } catch (err) {
-                    console.error("Attachment upload failed:", err);
-                    setMessages((prev) =>
-                        prev.map((m) => (String(m.id) === String(messageId) ? { ...m, status: "ATTACH_FAILED" } : m))
-                    );
-                }
-            })();
-        }
+            try {
+                await apiForm("/api/files/upload", { token, formData });
+            } catch (err) {
+                setMessages(prev => prev.map(m => m.id === confirmed.id ? { ...m, status: "ATTACH_FAILED" } : m));
+            }
+        });
     }, [messages, token, setMessages]);
 
-    useLayoutEffect(() => {
-        const el = scrollRef.current;
-        if (!el) return;
-
-        if (isPrependingRef.current) {
-            el.scrollTop = el.scrollHeight - prevScrollHeightRef.current;
-            isPrependingRef.current = false;
-        } else if (shouldAutoScrollRef.current) {
-            el.scrollTop = el.scrollHeight;
-        }
-    }, [messages, typingUser]);
-
-    const handleScroll = () => {
-        if (scrollRef.current) {
-            shouldAutoScrollRef.current = isNearBottom(scrollRef.current);
-        }
-    };
-
-    const stopTyping = useCallback(() => {
-        // clear local throttle so we can send typing again immediately later
-        if (typingCooldownRef.current) {
-            clearTimeout(typingCooldownRef.current);
-            typingCooldownRef.current = null;
-        }
-        publishTyping(STOP_TYPING);
-    }, [publishTyping]);
-
+    // --- 🟠 HANDLERS ---
     const handleInputChange = (e) => {
         const val = e.target.value;
         setText(val);
-
         if (!isConnected || !chatId) return;
 
-        // empty -> stop
-        if (val.trim().length === 0) {
-            stopTyping();
+        if (!val.trim()) {
+            publishTyping(STOP_TYPING);
             return;
         }
 
-        // throttle typing
         if (!typingCooldownRef.current) {
             publishTyping(currentUser);
             typingCooldownRef.current = setTimeout(() => {
@@ -204,102 +168,54 @@ export default function ChatArea({
         }
     };
 
-    const handleLoadMore = () => {
-        if (scrollRef.current) {
-            prevScrollHeightRef.current = scrollRef.current.scrollHeight;
-            isPrependingRef.current = true;
-            onLoadMore?.();
-        }
-    };
-
-    const handleFileChange = (e) => {
-        const files = Array.from(e.target.files || []);
-        if (!files.length) return;
-        setSelectedFiles((prev) => [...prev, ...files]);
-        e.target.value = "";
-    };
-
-    const removeSelectedFile = (idx) => {
-        setSelectedFiles((prev) => prev.filter((_, i) => i !== idx));
-    };
-
     const handleSend = async () => {
         const trimmed = text.trim();
         const hasFiles = selectedFiles.length > 0;
         if ((!trimmed && !hasFiles) || !chatId) return;
 
-        // ✅ stop typing immediately (use STOP token)
-        stopTyping();
+        if (typingCooldownRef.current) {
+            clearTimeout(typingCooldownRef.current);
+            typingCooldownRef.current = null;
+        }
+        publishTyping(STOP_TYPING);
 
         const tempId = `temp-${Date.now()}`;
-        const filesToUpload = selectedFiles;
-        const contentToSend = trimmed || "";
-
         const optimisticMsg = {
             id: tempId,
             clientTempId: tempId,
             conversationId: chatId,
             senderUsername: currentUser,
             content: trimmed,
-            attachments: filesToUpload.map((f, i) => ({
-                id: `local-${tempId}-${i}`,
-                originalName: f.name,
-                fileSize: f.size,
-                pending: true,
-            })),
+            attachments: selectedFiles.map((f, i) => ({ id: `l-${tempId}-${i}`, originalName: f.name, pending: true })),
             createdAt: new Date().toISOString(),
             status: "SENDING",
         };
 
-        setMessages((prev) => [...prev, optimisticMsg]);
+        if (hasFiles) pendingUploadsRef.current.set(tempId, { files: selectedFiles, conversationId: chatId });
+
+        setMessages(prev => [...prev, optimisticMsg]);
         setText("");
         setSelectedFiles([]);
         shouldAutoScrollRef.current = true;
 
-        onMessageSent?.({
-            ...optimisticMsg,
-            content: trimmed || (hasFiles ? "Attachment" : ""),
-        });
-
-        if (hasFiles) {
-            pendingUploadsRef.current.set(tempId, {
-                files: filesToUpload,
-                conversationId: chatId,
-            });
-        }
+        onMessageSent?.({ ...optimisticMsg, content: trimmed || "Attachment" });
 
         try {
-            const response = await fetch(`/api/messages/chat/${chatId}/smsg`, {
+            const res = await fetch(`/api/messages/chat/${chatId}/smsg`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ content: contentToSend, tempId }),
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ content: trimmed, tempId }),
             });
-
-            if (!response.ok) throw new Error(`Failed to send (${response.status})`);
+            if (!res.ok) throw new Error();
         } catch (err) {
-            console.error("Send Error:", err);
-            pendingUploadsRef.current.delete(tempId);
-            setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: "FAILED" } : m)));
-        }
-    };
-
-    const onKeyDown = (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
+            setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "FAILED" } : m));
         }
     };
 
     if (!activeChat) {
         return (
-            <main className="chat-area">
-                <div className="chat-empty-state">
-                    <div className="empty-icon">💬</div>
-                    <p>Select a conversation to start chatting</p>
-                </div>
+            <main className="chat-area empty">
+                <div className="empty-state">💬 Select a chat to start</div>
             </main>
         );
     }
@@ -316,15 +232,17 @@ export default function ChatArea({
                 messages={messages}
                 currentUser={currentUser}
                 typingUser={typingUser}
+                watermarks={watermarks}
+                activeChatId={chatId}
             />
 
             <MessageComposer
                 value={text}
                 onChange={handleInputChange}
-                onKeyDown={onKeyDown}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())}
                 selectedFiles={selectedFiles}
-                onFileChange={handleFileChange}
-                onRemoveFile={removeSelectedFile}
+                onFileChange={(e) => setSelectedFiles(prev => [...prev, ...Array.from(e.target.files || [])])}
+                onRemoveFile={(idx) => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
                 onSend={handleSend}
                 disabled={!text.trim() && selectedFiles.length === 0}
             />

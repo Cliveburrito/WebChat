@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import ChatList from "./ChatList";
+import ChatList from "../common/ChatList.jsx";
 import CreateGroupModal from "./CreateGroupModal";
 
 export default function Sidebar({
@@ -7,15 +7,15 @@ export default function Sidebar({
                                     users = [],
                                     activeChat,
                                     onSelectChat,
-                                    currentUser,
+                                    currentUser,   // Username (String)
+                                    currentUserId, // <--- NEW: Το ID του χρήστη (Long/Int)
                                     token,
                                     onGroupCreated,
-                                    onlineUsers = []
+                                    onlineUsers = [],
+                                    watermarks     // <--- NEW: Τα ticks από το App.js
                                 }) {
     const [isOpen, setIsOpen] = useState(false);
 
-    // (προαιρετικό) μπορείς να το σβήσεις τελείως γιατί το modal έχει δικό του useMemo,
-    // το αφήνω εδώ μόνο αν θέλεις να το ξαναχρησιμοποιήσεις αλλού.
     const contactsCount = useMemo(() => {
         if (!users) return 0;
         return users.filter(u => u.username !== currentUser).length;
@@ -41,11 +41,14 @@ export default function Sidebar({
                 <div className="sidebar-section">
                     <h4 className="sidebar-title">My Chats</h4>
                     <div className="sidebar-list">
+                        {/* Περνάμε τα props κάτω στο ChatList */}
                         <ChatList
                             conversations={conversations}
                             activeChat={activeChat}
                             onSelectChat={onSelectChat}
                             onlineUsers={onlineUsers}
+                            watermarks={watermarks}       // <--- Pass down
+                            currentUserId={currentUserId} // <--- Pass down
                         />
                     </div>
                 </div>

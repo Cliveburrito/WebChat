@@ -1,0 +1,77 @@
+.chat-area-header {
+    height: 65px; /* Σταθερό ύψος για συνοχή */
+    background-color: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    flex-shrink: 0; /* Να μην μικραίνει αν έχει πολλά μηνύματα */
+    z-index: 10;
+}
+
+.header-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+}
+
+.text-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.chat-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.chat-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* Ειδικό στυλ αν είναι Muted */
+.chat-status.muted {
+    color: #ff9800;
+    font-weight: 500;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.mute-btn {
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+}
+
+.mute-btn:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.mute-btn.active {
+    opacity: 0.6;
+    filter: grayscale(1);
+}
+
+/* Για Dark Mode υποστήριξη αν το έχεις */
+[data-theme='dark'] .mute-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}

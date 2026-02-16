@@ -29,6 +29,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final AuthRateLimitFilter authRateLimitFilter;
 
     /**
      * Configures application-level HTTP security rules.
@@ -53,9 +54,9 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .exceptionHandling(exceptions -> exceptions
-                .authenticationEntryPoint(
-                        new org.springframework.security.web.authentication.HttpStatusEntryPoint(
-                                org.springframework.http.HttpStatus.UNAUTHORIZED)))
+                        .authenticationEntryPoint(
+                                new org.springframework.security.web.authentication.HttpStatusEntryPoint(
+                                        org.springframework.http.HttpStatus.UNAUTHORIZED)))
                 // Publicly accessible routes (no token required)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -68,9 +69,11 @@ public class SecurityConfig {
                         // All other routes require authentication
                         .anyRequest().authenticated()
                 )
-
+                .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 // Add our JWT filter before Spring Security's default authentication filter
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+
 
         return http.build();
     }

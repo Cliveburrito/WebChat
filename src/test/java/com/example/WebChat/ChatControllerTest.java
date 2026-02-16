@@ -5,6 +5,7 @@ import com.example.WebChat.DTO.ChatMessageRequest;
 import com.example.WebChat.DTO.CustomPrincipal;
 import com.example.WebChat.Service.JwtService;
 import com.example.WebChat.Service.MessageService;
+import com.example.WebChat.Service.RateLimiterService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,8 @@ class ChatControllerTest {
     @Autowired private ObjectMapper objectMapper;
     @MockitoBean
     private JwtService jwtService;
+    @MockitoBean
+    private RateLimiterService rateLimiterService;
 
 
     @MockitoBean private MessageService messageService;
@@ -55,6 +58,7 @@ class ChatControllerTest {
 
     @Test
     @DisplayName("POST /api/messages/chat/{id}/smsg - Should send message via REST (202)")
+    @WithMockCustomUser()
     void sendMessage_ShouldAcceptMessage() throws Exception {
         ChatMessageRequest request = new ChatMessageRequest("Hello, world!", "temp-123-abc");
 
@@ -83,6 +87,7 @@ class ChatControllerTest {
     }
 
     @Test
+    @WithMockCustomUser()
     @DisplayName("POST /api/messages/chat/{id}/smsg - Should return 401 without authentication")
     void sendMessage_WithoutAuth_ShouldReturnUnauthorized() throws Exception {
         ChatMessageRequest request = new ChatMessageRequest("Hello", "temp-123");
@@ -98,6 +103,7 @@ class ChatControllerTest {
 
     @Test
     @DisplayName("POST /api/messages/chat/{id}/smsg - Should handle empty content (still 202)")
+    @WithMockCustomUser()
     void sendMessage_WithEmptyContent_ShouldStillProcess() throws Exception {
         ChatMessageRequest request = new ChatMessageRequest("", "temp-123");
 

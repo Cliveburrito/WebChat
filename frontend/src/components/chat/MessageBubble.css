@@ -1,0 +1,49 @@
+.message-wrapper {
+    display: flex;
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 0 10px;
+}
+
+.message-bubble {
+    max-width: 70%;
+    padding: 8px 12px;
+    border-radius: 15px;
+    position: relative;
+    /* 🚀 ΤΟ ΚΛΕΙΔΙ ΓΙΑ ΤΟ OVERFLOW: */
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Fix για τα ονόματα των αρχείων (Ellipsis) */
+.attachment-pill {
+    display: inline-block;
+    max-width: 100%; /* Για να μην βγαίνει από το bubble */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis; /* Βάζει ... στο τέλος */
+    background: rgba(0,0,0,0.05);
+    padding: 5px 10px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--primary-blue);
+    font-size: 0.85rem;
+}
+
+.message-row {
+    display: flex;
+    flex-direction: column; /* Τα ticks κάτω από το κείμενο αν είναι μεγάλο */
+    gap: 2px;
+}
+
+.message-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    font-size: 0.7rem;
+    align-self: flex-end; /* Πάντα κάτω δεξιά */
+    margin-top: 2px;
+}

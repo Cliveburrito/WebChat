@@ -1,3 +1,4 @@
+import "./TypingIndicator.css";
 export default function TypingIndicator({ typingUser }) {
     if (!typingUser) return null;
 

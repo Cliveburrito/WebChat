@@ -49,16 +49,6 @@ public class ConversationController {
     }
 
 
-    /**
-     * The endpoint the frontend uses to let the backend know the user has clicked
-     * the chat and has read the messages!
-     */
-    @PostMapping("/{id}/read")
-    public ResponseEntity<?> markAsRead(@PathVariable Long id, @AuthenticationPrincipal CustomPrincipal principal) {
-        conversationService.markAsRead(id, principal.id());
-        return ResponseEntity.ok().build();
-    }
-
     @PatchMapping("/{id}/mute")
     public ResponseEntity<?> mute(@PathVariable Long id, @RequestParam boolean status, @AuthenticationPrincipal CustomPrincipal principal) {
         conversationService.toggleMute(principal.id(), id, status);

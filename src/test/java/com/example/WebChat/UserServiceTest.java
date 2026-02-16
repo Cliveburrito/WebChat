@@ -117,8 +117,6 @@ class UserServiceTest {
             // Arrange
             RegisterUserRequest request = new RegisterUserRequest(TEST_USERNAME, TEST_EMAIL, TEST_PASSWORD);
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
             when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(false);
             when(userRepository.existsByEmail(TEST_EMAIL)).thenReturn(false);
             when(passwordEncoder.encode(TEST_PASSWORD)).thenReturn(HASHED_PASSWORD);
@@ -144,23 +142,7 @@ class UserServiceTest {
             assertThat(savedUser.isStealthMode()).isFalse();
         }
 
-        @Test
-        @DisplayName("Should throw RateLimitExceeded when rate limit exceeded")
-        void shouldThrowRateLimitExceeded() {
-            // Arrange
-            RegisterUserRequest request = new RegisterUserRequest(TEST_USERNAME, TEST_EMAIL, TEST_PASSWORD);
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(false);
-
-            // Act & Assert
-            assertThatThrownBy(() -> userService.register(request, TEST_IP))
-                    .isInstanceOf(RateLimitExceededException.class)
-                    .hasMessageContaining("Too many requests");
-
-            verify(userRepository, never()).existsByUsername(anyString());
-            verify(userRepository, never()).save(any(User.class));
-        }
 
         @Test
         @DisplayName("Should throw UserAlreadyExists when username taken")
@@ -168,8 +150,6 @@ class UserServiceTest {
             // Arrange
             RegisterUserRequest request = new RegisterUserRequest(TEST_USERNAME, TEST_EMAIL, TEST_PASSWORD);
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
             when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(true);
 
             // Act & Assert
@@ -187,8 +167,6 @@ class UserServiceTest {
             // Arrange
             RegisterUserRequest request = new RegisterUserRequest(TEST_USERNAME, TEST_EMAIL, TEST_PASSWORD);
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
             when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(false);
             when(userRepository.existsByEmail(TEST_EMAIL)).thenReturn(true);
 
@@ -206,8 +184,6 @@ class UserServiceTest {
             // Arrange
             RegisterUserRequest request = new RegisterUserRequest("", TEST_EMAIL, TEST_PASSWORD);
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
 
             // Note: The validation is usually done at controller level with @Valid
             // Here we're testing that the service passes through whatever it gets
@@ -234,8 +210,6 @@ class UserServiceTest {
                     .authorities("USER")
                     .build();
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
             when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                     .thenReturn(authentication);
             when(authentication.getPrincipal()).thenReturn(userDetails);
@@ -258,22 +232,6 @@ class UserServiceTest {
             );
         }
 
-        @Test
-        @DisplayName("Should throw RateLimitExceeded when rate limit exceeded")
-        void shouldThrowRateLimitExceeded() {
-            // Arrange
-            LoginUserRequest request = new LoginUserRequest(TEST_USERNAME, TEST_PASSWORD);
-
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(false);
-
-            // Act & Assert
-            assertThatThrownBy(() -> userService.login(request, TEST_IP))
-                    .isInstanceOf(RateLimitExceededException.class)
-                    .hasMessageContaining("Too many requests");
-
-            verify(authenticationManager, never()).authenticate(any());
-        }
 
         @Test
         @DisplayName("Should propagate BadCredentialsException")
@@ -281,8 +239,7 @@ class UserServiceTest {
             // Arrange
             LoginUserRequest request = new LoginUserRequest(TEST_USERNAME, "wrongpassword");
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
+
             when(authenticationManager.authenticate(any()))
                     .thenThrow(new BadCredentialsException("Bad credentials"));
 
@@ -306,8 +263,6 @@ class UserServiceTest {
                     .authorities("USER")
                     .build();
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
             when(authenticationManager.authenticate(any()))
                     .thenReturn(authentication);
             when(authentication.getPrincipal()).thenReturn(userDetails);
@@ -396,8 +351,6 @@ class UserServiceTest {
             // 1. Register
             RegisterUserRequest registerRequest = new RegisterUserRequest(TEST_USERNAME, TEST_EMAIL, TEST_PASSWORD);
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
             when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(false);
             when(userRepository.existsByEmail(TEST_EMAIL)).thenReturn(false);
             when(passwordEncoder.encode(TEST_PASSWORD)).thenReturn(HASHED_PASSWORD);
@@ -419,9 +372,6 @@ class UserServiceTest {
             // 2. Login
             LoginUserRequest loginRequest = new LoginUserRequest(TEST_USERNAME, TEST_PASSWORD);
 
-            reset(bucket); // Reset mock for new test
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
             when(authenticationManager.authenticate(any())).thenReturn(authentication);
             when(authentication.getPrincipal()).thenReturn(userDetails);
             when(userRepository.findByUsername(TEST_USERNAME)).thenReturn(Optional.of(testUser));
@@ -453,8 +403,6 @@ class UserServiceTest {
             // Arrange
             RegisterUserRequest request = new RegisterUserRequest(TEST_USERNAME, TEST_EMAIL, TEST_PASSWORD);
 
-            when(rateLimiter.resolveAuthBucket(null)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
             when(userRepository.existsByUsername(TEST_USERNAME)).thenReturn(false);
             when(userRepository.existsByEmail(TEST_EMAIL)).thenReturn(false);
             when(passwordEncoder.encode(TEST_PASSWORD)).thenReturn(HASHED_PASSWORD);
@@ -466,7 +414,7 @@ class UserServiceTest {
 
             // Assert
             assertThat(response).isNotNull();
-            verify(rateLimiter).resolveAuthBucket(null);
+
         }
 
         @Test
@@ -476,8 +424,7 @@ class UserServiceTest {
             String longUsername = "a".repeat(50); // Assuming max length 25 in entity, this should fail at DB level
             RegisterUserRequest request = new RegisterUserRequest(longUsername, TEST_EMAIL, TEST_PASSWORD);
 
-            when(rateLimiter.resolveAuthBucket(TEST_IP)).thenReturn(bucket);
-            when(bucket.tryConsume(1)).thenReturn(true);
+
             when(userRepository.existsByUsername(longUsername)).thenReturn(false);
             when(userRepository.existsByEmail(TEST_EMAIL)).thenReturn(false);
 

@@ -1,266 +1,195 @@
 package com.example.WebChat;
 
+import com.example.WebChat.Exception.RateLimitExceededException;
 import com.example.WebChat.Service.RateLimiterService;
+import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.springframework.security.core.context.SecurityContextHolder;
-import static org.junit.jupiter.api.Assertions.*;
+import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.distributed.proxy.ProxyManager;
+import io.github.bucket4j.distributed.proxy.RemoteBucketBuilder;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
 class RateLimiterServiceTest {
+
+    @Mock
+    ProxyManager<String> proxyManager;
+    @Mock
+    RemoteBucketBuilder<String> builder;
 
     private RateLimiterService rateLimiterService;
 
+    // Simulate Redis: one bucket per key
+    private final Map<String, Bucket> bucketsByKey = new ConcurrentHashMap<>();
+
     @BeforeEach
     void setUp() {
-        rateLimiterService = new RateLimiterService();
+        when(proxyManager.builder()).thenReturn(builder);
+
+        when(builder.build(anyString(), any(Supplier.class)))
+                .thenAnswer(inv -> {
+                    String key = inv.getArgument(0);
+                    Supplier<BucketConfiguration> supplier = inv.getArgument(1);
+                    BucketConfiguration config = supplier.get();
+
+                    Bucket proxyMock = mock(Bucket.class, withSettings().extraInterfaces(io.github.bucket4j.distributed.BucketProxy.class));
+
+                    Bucket realLocalBucket = bucketsByKey.computeIfAbsent(key, k -> {
+                        var lb = Bucket.builder();
+
+                        // ✅ ΣΩΣΤΟ: Iterate over the array and add each Bandwidth individually
+                        for (Bandwidth b : config.getBandwidths()) {
+                            lb.addLimit(b);
+                        }
+
+                        return lb.build();
+                    });
+
+                    when(proxyMock.tryConsumeAndReturnRemaining(anyLong())).thenAnswer(i ->
+                            realLocalBucket.tryConsumeAndReturnRemaining(i.getArgument(0, Long.class))
+                    );
+
+                    return proxyMock;
+                });
+
+        rateLimiterService = new RateLimiterService(proxyManager);
     }
 
     @AfterEach
     void tearDown() {
-        SecurityContextHolder.clearContext();
-        rateLimiterService.clearBuckets(); // Clean up between tests
+        bucketsByKey.clear();
     }
 
     @Nested
-    @DisplayName("Message Bucket Tests")
-    class MessageBucketTests {
+    @DisplayName("Auth rate limiting")
+    class AuthTests {
 
         @Test
-        @DisplayName("Should return same bucket for same user")
-        void shouldReturnSameBucketForSameUser() {
-            // Arrange
-            Long userId = 1L;
-
-            // Act
-            Bucket bucket1 = rateLimiterService.resolveMessageBucket(userId);
-            Bucket bucket2 = rateLimiterService.resolveMessageBucket(userId);
-
-            // Assert
-            assertSame(bucket1, bucket2, "Should return the same bucket instance for the same user");
-        }
-
-        @Test
-        @DisplayName("Should limit messages after capacity is exceeded")
-        void shouldLimitMessagesAfterCapacityIsExceeded() {
-            // Arrange
-            Long userId = 1L;
-            Bucket bucket = rateLimiterService.resolveMessageBucket(userId);
-
-            // Act & Assert - First 5 messages should be allowed
-            for (int i = 0; i < 5; i++) {
-                assertTrue(bucket.tryConsume(1), "Should allow message " + (i + 1));
-            }
-
-            // 6th message should be blocked
-            assertFalse(bucket.tryConsume(1), "Should block the 6th message");
-        }
-
-        @Test
-        @DisplayName("Should refill tokens after time passes")
-        void shouldRefillTokensAfterTimePasses() {
-            // Arrange
-            Long userId = 1L;
-            Bucket bucket = rateLimiterService.resolveMessageBucket(userId);
-
-            // Consume all 5 tokens
-            for (int i = 0; i < 5; i++) {
-                assertTrue(bucket.tryConsume(1));
-            }
-
-            // Verify no tokens left
-            assertFalse(bucket.tryConsume(1));
-
-            // Wait for refill (10 seconds is long for tests, so we'll mock in real scenario)
-            // In a real test, you might want to use a shorter duration or mock the bucket
-            // For now, we'll just verify the bucket exists
-            assertNotNull(bucket);
-        }
-
-        @Test
-        @DisplayName("Should have different buckets for different users")
-        void shouldHaveDifferentBucketsForDifferentUsers() {
-            // Act
-            Bucket user1 = rateLimiterService.resolveMessageBucket(1L);
-            Bucket user2 = rateLimiterService.resolveMessageBucket(2L);
-
-            // Assert
-            assertNotSame(user1, user2, "Different users must have separate buckets");
-
-            // Verify they work independently
-            assertTrue(user1.tryConsume(5)); // User1 consumes all
-            assertFalse(user1.tryConsume(1)); // User1 blocked
-            assertTrue(user2.tryConsume(1)); // User2 still allowed
-        }
-    }
-
-    @Nested
-    @DisplayName("Auth Bucket Tests")
-    class AuthBucketTests {
-
-        @Test
-        @DisplayName("Should return same bucket for same IP")
-        void shouldReturnSameBucketForSameIP() {
-            // Arrange
-            String ip = "192.168.1.1";
-
-            // Act
-            Bucket bucket1 = rateLimiterService.resolveAuthBucket(ip);
-            Bucket bucket2 = rateLimiterService.resolveAuthBucket(ip);
-
-            // Assert
-            assertSame(bucket1, bucket2, "Should return the same bucket instance for the same IP");
-        }
-
-        @Test
-        @DisplayName("Should have different buckets for different IPs")
-        void shouldHaveDifferentBucketsForDifferentIPs() {
-            // Act
-            Bucket ip1 = rateLimiterService.resolveAuthBucket("192.168.1.1");
-            Bucket ip2 = rateLimiterService.resolveAuthBucket("1.1.1.1");
-
-            // Assert
-            assertNotSame(ip1, ip2, "Different IPs must have separate buckets");
-        }
-
-        @Test
-        @DisplayName("Should limit auth attempts after capacity is exceeded")
+        @DisplayName("Allows first 5 auth attempts, blocks 6th (throws)")
         void shouldLimitAuthAttempts() {
-            // Arrange
             String ip = "192.168.1.1";
-            Bucket bucket = rateLimiterService.resolveAuthBucket(ip);
 
-            // Act & Assert - First 5 attempts should be allowed
             for (int i = 0; i < 5; i++) {
-                assertTrue(bucket.tryConsume(1), "Should allow auth attempt " + (i + 1));
+                assertDoesNotThrow(() -> rateLimiterService.consumeAuthOrThrow(ip));
             }
 
-            // 6th attempt should be blocked
-            assertFalse(bucket.tryConsume(1), "Should block the 6th auth attempt");
-        }
-    }
-
-    @Nested
-    @DisplayName("File Bucket Tests")
-    class FileBucketTests {
-
-        @Test
-        @DisplayName("Should return same bucket for same user")
-        void shouldReturnSameBucketForSameUser() {
-            // Arrange
-            Long userId = 1L;
-
-            // Act
-            Bucket bucket1 = rateLimiterService.resolveFileBucket(userId);
-            Bucket bucket2 = rateLimiterService.resolveFileBucket(userId);
-
-            // Assert
-            assertSame(bucket1, bucket2, "Should return the same bucket instance for the same user (FIXED!)");
+            assertThrows(RateLimitExceededException.class,
+                    () -> rateLimiterService.consumeAuthOrThrow(ip));
         }
 
         @Test
-        @DisplayName("Should limit file uploads after capacity is exceeded")
-        void shouldLimitFileUploads() {
-            // Arrange
-            Long userId = 1L;
-            Bucket bucket = rateLimiterService.resolveFileBucket(userId);
+        @DisplayName("Different IPs have independent limits")
+        void shouldHaveIndependentLimitsPerIp() {
+            String ip1 = "192.168.1.1";
+            String ip2 = "1.1.1.1";
 
-            // Act & Assert - First 5 uploads should be allowed (each file counts as 1)
             for (int i = 0; i < 5; i++) {
-                assertTrue(bucket.tryConsume(1), "Should allow file upload " + (i + 1));
+                rateLimiterService.consumeAuthOrThrow(ip1);
             }
+            assertThrows(RateLimitExceededException.class,
+                    () -> rateLimiterService.consumeAuthOrThrow(ip1));
 
-            // 6th upload should be blocked
-            assertFalse(bucket.tryConsume(1), "Should block the 6th file upload");
-        }
-
-        @Test
-        @DisplayName("Should handle multiple files in one upload")
-        void shouldHandleMultipleFilesInOneUpload() {
-            // Arrange
-            Long userId = 1L;
-            Bucket bucket = rateLimiterService.resolveFileBucket(userId);
-
-            // Act & Assert - Upload 3 files at once (consumes 3 tokens)
-            assertTrue(bucket.tryConsume(3), "Should allow uploading 3 files");
-
-            // Upload 2 more files (consumes 2 tokens, total 5)
-            assertTrue(bucket.tryConsume(2), "Should allow uploading 2 more files");
-
-            // Try to upload 1 more file (should be blocked)
-            assertFalse(bucket.tryConsume(1), "Should block when capacity exceeded");
-        }
-
-        @Test
-        @DisplayName("Should have different buckets for different users")
-        void shouldHaveDifferentBucketsForDifferentUsers() {
-            // Act
-            Bucket user1 = rateLimiterService.resolveFileBucket(1L);
-            Bucket user2 = rateLimiterService.resolveFileBucket(2L);
-
-            // Assert
-            assertNotSame(user1, user2, "Different users must have separate file buckets");
+            assertDoesNotThrow(() -> rateLimiterService.consumeAuthOrThrow(ip2));
         }
     }
 
     @Nested
-    @DisplayName("Cross-Bucket Tests")
-    class CrossBucketTests {
+    @DisplayName("Message rate limiting")
+    class MessageTests {
 
         @Test
-        @DisplayName("Should have separate buckets for different types for same user")
-        void shouldHaveSeparateBucketsForDifferentTypes() {
-            // Arrange
+        @DisplayName("Allows first 5 messages, blocks 6th (throws)")
+        void shouldLimitMessagesAfterCapacityExceeded() {
+            Long userId = 1L;
+            String username = "testuser";
+            Long chatId = 100L;
+
+            for (int i = 0; i < 5; i++) {
+                assertDoesNotThrow(() ->
+                        rateLimiterService.consumeMessageOrThrow(userId, username, chatId));
+            }
+
+            assertThrows(RateLimitExceededException.class,
+                    () -> rateLimiterService.consumeMessageOrThrow(userId, username, chatId));
+        }
+
+        @Test
+        @DisplayName("Different users have independent message limits")
+        void shouldHaveIndependentMessageLimitsPerUser() {
+            Long u1 = 1L;
+            Long u2 = 2L;
+            Long chatId = 100L;
+
+            for (int i = 0; i < 5; i++) {
+                rateLimiterService.consumeMessageOrThrow(u1, "u1", chatId);
+            }
+            assertThrows(RateLimitExceededException.class,
+                    () -> rateLimiterService.consumeMessageOrThrow(u1, "u1", chatId));
+
+            assertDoesNotThrow(() -> rateLimiterService.consumeMessageOrThrow(u2, "u2", chatId));
+        }
+
+        @Test
+        @DisplayName("Same user, different chatId still shares limit (because key is per-user)")
+        void shouldShareLimitAcrossChatsForSameUser() {
             Long userId = 1L;
 
-            // Act
-            Bucket messageBucket = rateLimiterService.resolveMessageBucket(userId);
-            Bucket fileBucket = rateLimiterService.resolveFileBucket(userId);
+            // 5 tokens total regardless of chatId because key = rl:msg:user:<id>
+            for (int i = 0; i < 5; i++) {
+                rateLimiterService.consumeMessageOrThrow(userId, "u", 100L);
+            }
 
-            // Assert
-            assertNotSame(messageBucket, fileBucket, "Message and file buckets should be different");
-
-            // Verify they work independently
-            assertTrue(messageBucket.tryConsume(5)); // Use all message tokens
-            assertFalse(messageBucket.tryConsume(1)); // Message blocked
-
-            assertTrue(fileBucket.tryConsume(1)); // File still allowed
+            assertThrows(RateLimitExceededException.class,
+                    () -> rateLimiterService.consumeMessageOrThrow(userId, "u", 200L));
         }
     }
 
     @Nested
-    @DisplayName("Concurrency Tests")
-    class ConcurrencyTests {
+    @DisplayName("File upload rate limiting")
+    class FileTests {
 
         @Test
-        @DisplayName("Should handle concurrent access to buckets")
-        void shouldHandleConcurrentAccess() throws InterruptedException {
-            // Arrange
+        @DisplayName("Allows total 5 tokens, blocks when exceeded (multi-file consumes multiple tokens)")
+        void shouldLimitUploadsByFilesCount() {
             Long userId = 1L;
+            String username = "testuser";
+            Long convId = 10L;
+            Long messageId = 99L;
 
-            // Act - Simulate 10 threads trying to access the same bucket
-            Runnable task = () -> {
-                Bucket bucket = rateLimiterService.resolveMessageBucket(userId);
-                assertNotNull(bucket);
-            };
+            assertDoesNotThrow(() ->
+                    rateLimiterService.consumeFileOrThrow(userId, username, 3, convId, messageId));
 
-            Thread[] threads = new Thread[10];
-            for (int i = 0; i < 10; i++) {
-                threads[i] = new Thread(task);
-                threads[i].start();
-            }
+            assertDoesNotThrow(() ->
+                    rateLimiterService.consumeFileOrThrow(userId, username, 2, convId, messageId));
 
-            for (Thread thread : threads) {
-                thread.join();
-            }
+            assertThrows(RateLimitExceededException.class, () ->
+                    rateLimiterService.consumeFileOrThrow(userId, username, 1, convId, messageId));
+        }
 
-            // Assert - Should still have only one bucket instance
-            Bucket bucket1 = rateLimiterService.resolveMessageBucket(userId);
-            Bucket bucket2 = rateLimiterService.resolveMessageBucket(userId);
-            assertSame(bucket1, bucket2);
+        @Test
+        @DisplayName("Different users have independent file limits")
+        void shouldHaveIndependentFileLimits() {
+            Long u1 = 1L;
+            Long u2 = 2L;
+
+            assertDoesNotThrow(() ->
+                    rateLimiterService.consumeFileOrThrow(u1, "u1", 5, 10L, 99L));
+
+            assertThrows(RateLimitExceededException.class, () ->
+                    rateLimiterService.consumeFileOrThrow(u1, "u1", 1, 10L, 99L));
+
+            assertDoesNotThrow(() ->
+                    rateLimiterService.consumeFileOrThrow(u2, "u2", 1, 10L, 99L));
         }
     }
 }

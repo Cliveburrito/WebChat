@@ -18,6 +18,8 @@ public record CustomPrincipal(
         Collection<? extends GrantedAuthority> authorities
 ) implements UserDetails {
 
+
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return authorities;

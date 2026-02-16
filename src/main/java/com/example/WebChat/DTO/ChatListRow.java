@@ -7,12 +7,18 @@ public interface ChatListRow {
     String getDisplayName();
     String getLastContent();
     Instant getLastMessageAt();
-    Integer getUnreadCount();
+    Long getLastMessageId();
+    Long getLastSenderId();
+    Long getUnreadCount();
+    Boolean getIsGroup();
     Boolean getMuted();
 
+    // Ωραίο helper method!
     default String getSidebarSnippet() {
         if (getLastContent() == null || getLastContent().isBlank()) {
-            return "📷 Attachment sent";
+            // Μπορείς να επιστρέφεις null ή κενό αν θες να το χειριστεί το React
+            // ή ένα placeholder κείμενο
+            return "";
         }
         return getLastContent();
     }

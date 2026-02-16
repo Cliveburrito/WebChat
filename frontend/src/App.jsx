@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-
 import Sidebar from "./components/sidebar/Sidebar";
 import ChatArea from "./components/chat/ChatArea";
 import RightSidebar from "./components/sidebar/RightSidebar";
@@ -12,17 +11,26 @@ import { useChatData } from "./hooks/useChatData";
 import { useChatSocket } from "./hooks/useChatSocket";
 import { useChatTopics } from "./hooks/useChatTopics";
 
-function App() {
-    const { token, currentUser, authView, setAuthView, isAuthed, loginSuccess, logout } = useAuth();
+import "./App.css"; // Σιγουρέψου ότι το import είναι εδώ
 
+function App() {
+    const { token, currentUser, currentUserId, authView, setAuthView, isAuthed, loginSuccess, logout } = useAuth();
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
     const [stealthMode, setStealthMode] = useState(false);
 
+    // 1. WebSocket Connection
+    const { stompClient, onlineUsers } = useChatSocket({
+        token,
+        username: currentUser,
+    });
+
+    // 2. Chat Data Logic
     const {
         conversations,
         allUsers,
         activeChat,
         messages,
+        watermarks,
         msgPage,
         hasMore,
         setActiveChat,
@@ -33,17 +41,11 @@ function App() {
         onGroupCreated,
         toggleMute,
         markChatRead,
+        onWatermarkUpdate,
         activeChatId,
-    } = useChatData({ token, currentUser });
+    } = useChatData({ token, currentUser, stompClient });
 
-    // WS connection + presence only
-    const { stompClient, onlineUsers } = useChatSocket({
-        token,
-        username: currentUser,
-        debug: true,
-    });
-
-    // ✅ realtime for chats: messages, confirmation, attachments, unread, bump
+    // 3. Live Subscriptions
     useChatTopics({
         stompClient,
         conversations,
@@ -52,7 +54,7 @@ function App() {
         setMessages,
         bumpConversation,
         markChatRead,
-        debug: true, // βγάλτο μετά
+        onWatermarkUpdate,
     });
 
     const toggleTheme = useCallback(() => {
@@ -69,9 +71,7 @@ function App() {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (response.ok) setStealthMode(newStatus);
-        } catch (err) {
-            console.error("Stealth update failed:", err);
-        }
+        } catch (err) { console.error("Stealth update failed:", err); }
     }, [stealthMode, token]);
 
     if (!isAuthed) {
@@ -84,60 +84,31 @@ function App() {
 
     return (
         <div className={`app-container ${theme === "dark" ? "dark-theme" : ""}`}>
-            <header className="header">
-                <div>
-                    <strong>WebChat</strong> | {currentUser}
+            {/* GLOBAL HEADER */}
+            <header className="main-header">
+                <div className="brand">
+                    <strong>WebChat</strong> <span className="user-tag">| {currentUser}</span>
                 </div>
 
-                <div style={{ display: "flex", gap: "10px" }}>
-                    <button
-                        onClick={toggleTheme}
-                        style={{
-                            padding: "5px 12px",
-                            cursor: "pointer",
-                            borderRadius: "15px",
-                            border: "1px solid var(--border-color)",
-                            background: "var(--bg-sidebar)",
-                            color: "var(--text-main)",
-                            fontSize: "0.85rem",
-                        }}
-                    >
+                <div className="header-controls">
+                    <button className="control-btn" onClick={toggleTheme}>
                         {theme === "light" ? "🌙 Dark" : "☀️ Light"}
                     </button>
 
                     <span
+                        className={`stealth-ghost ${stealthMode ? "active" : ""}`}
                         onClick={toggleStealthMode}
-                        style={{
-                            cursor: "pointer",
-                            fontSize: "1.4rem",
-                            filter: stealthMode ? "drop-shadow(0 0 5px #6c5ce7)" : "grayscale(1)",
-                            opacity: stealthMode ? 1 : 0.5,
-                            transition: "all 0.3s ease",
-                        }}
-                        title={stealthMode ? "Invisible Mode!" : "Visible"}
+                        title={stealthMode ? "Invisible Mode" : "Visible"}
                     >
-            👻
-          </span>
+                        👻
+                    </span>
 
-                    <button
-                        onClick={logout}
-                        style={{
-                            padding: "5px 12px",
-                            cursor: "pointer",
-                            borderRadius: "15px",
-                            border: "none",
-                            background: "#ff4d4d",
-                            color: "white",
-                            fontSize: "0.85rem",
-                            fontWeight: "bold",
-                        }}
-                    >
-                        Logout
-                    </button>
+                    <button className="logout-btn" onClick={logout}>Logout</button>
                 </div>
             </header>
 
-            <div className="container">
+            {/* MAIN CONTENT AREA */}
+            <div className="main-layout">
                 <Sidebar
                     conversations={conversations}
                     users={allUsers}
@@ -145,8 +116,10 @@ function App() {
                     onSelectChat={setActiveChat}
                     onGroupCreated={onGroupCreated}
                     currentUser={currentUser}
+                    currentUserId={currentUserId}
                     token={token}
                     onlineUsers={onlineUsers}
+                    watermarks={watermarks}
                 />
 
                 <ChatArea
@@ -158,6 +131,7 @@ function App() {
                     token={token}
                     setMessages={setMessages}
                     stompClient={stompClient}
+                    watermarks={watermarks}
                     onMessageSent={(msg) =>
                         bumpConversation(msg.conversationId, {
                             content: msg.content,

@@ -72,21 +72,15 @@ public class ConversationService {
                 displayName,
                 "default-avatar.png",
                 "",
-                0,
-                Instant.now()
+                0L,
+                null,
+                null,
+                null,
+                false,
+                false
         );
     }
 
-    /**
-     *  Find the member user for this chat
-     *  and set his unreadMsg count to 0
-     */
-    @Transactional
-    public void markAsRead(Long conversationId, Long id) {
-        convMembershipRepository.resetUnreadCount(conversationId, id);
-
-        log.info("Marked conversation {} as read for user {}", conversationId, id);
-    }
 
     /**
      * Creates a group conversation with a list of users
@@ -114,37 +108,71 @@ public class ConversationService {
                 conv.getConversationName(),
                 "default-avatar.png",
                 "",
-                0,
-                conv.getCreatedAt() != null ? conv.getCreatedAt() : Instant.now()
+                0L,
+                null,
+                null,
+                null,
+                true,
+                false
+
         );
     }
 
     public List<ConversationResponse> getUserChats(Long id) {
-        User u = userRepository.getReferenceById(id);
-
-        // 1. Try to get the raw rows from Postgres (Your beastly query)
-        List<ChatListRow> rows = convMembershipRepository.findUserChats(u.getId());
+        // 1. Fetch from DB (The Beast Query)
+        List<ChatListRow> rows = convMembershipRepository.findUserChats(id);
 
         return rows.stream().map(r -> {
-            // 2. Check Redis for 'Hot' updates (Latest message might be newer in Redis)
+            // 2. Check Redis for 'Hot' updates
+            // Αν μόλις έστειλες μήνυμα και δεν έχει προλάβει να γραφτεί στη βάση,
+            // η Redis θα έχει τα πιο φρέσκα δεδομένα.
             String metaKey = "conv:meta:" + r.getConversationId();
             Map<Object, Object> meta = redisTemplate.opsForHash().entries(metaKey);
 
+            // --- A. CONTENT ---
             String content = meta.containsKey("lastContent")
                     ? (String) meta.get("lastContent")
-                    : r.getLastContent();
+                    : (r.getLastContent() == null ? "" : r.getLastContent());
 
-            Instant lastAt = meta.containsKey("lastMessageAt")
-                    ? Instant.parse((String) meta.get("lastMessageAt"))
-                    : r.getLastMessageAt();
+            // --- B. TIMESTAMP ---
+            Instant lastAt = r.getLastMessageAt();
+            if (meta.containsKey("lastMessageAt")) {
+                try {
+                    lastAt = Instant.parse((String) meta.get("lastMessageAt"));
+                } catch (Exception e) { /* ignore */ }
+            }
+
+            // --- C. MESSAGE ID (Για τα Ticks) ---
+            Long msgId = r.getLastMessageId();
+            if (meta.containsKey("lastMessageId")) {
+                try {
+                    msgId = Long.parseLong((String) meta.get("lastMessageId"));
+                } catch (Exception e) { /* ignore */ }
+            }
+
+            // --- D. SENDER ID (Για να ξέρουμε αν βάζουμε "You:") ---
+            Long senderId = r.getLastSenderId();
+            if (meta.containsKey("lastSenderId")) {
+                try {
+                    senderId = Long.parseLong((String) meta.get("lastSenderId"));
+                } catch (Exception e) { /* ignore */ }
+            }
+
+            // --- E. Unread Count (Παραμένει από τη SQL για τώρα) ---
+            // (Το Redis unread count είναι δύσκολο σπορ, ας εμπιστευτούμε τη βάση)
+            Long unread = r.getUnreadCount() == null ? 0L : r.getUnreadCount();
 
             return new ConversationResponse(
                     r.getConversationId(),
                     r.getDisplayName(),
-                    "default-avatar.png",
+                    "default-avatar.png", // Ή r.getAvatarUrl() αν το έχεις
                     content,
-                    r.getUnreadCount(),
-                    lastAt
+                    unread,
+                    lastAt,
+                    msgId,     // <--- New
+                    senderId,  // <--- New
+                    r.getIsGroup(), // <--- Αν το πρόσθεσες στο SQL
+                    r.getMuted()
             );
         }).toList();
     }
