@@ -78,7 +78,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String jwt = authHeader.substring(7);
-        log.info("The JWT: {}" , jwt);
 
         // 2. Stateless Auth Flow
         if (jwtService.isTokenValid(jwt)) {

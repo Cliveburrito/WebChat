@@ -19,6 +19,10 @@ export function useChatData({ token, currentUser, stompClient }) {
     const [watermarks, setWatermarks] = useState({});
 
     const activeChatRef = useRef(null);
+    const inFlightRequestsRef = useRef(0);
+    const requestedPagesRef = useRef(new Set());
+    const lastReadAckRef = useRef(new Map());
+    const lastDeliveredAckRef = useRef(new Map());
     useEffect(() => {
         activeChatRef.current = activeChat;
     }, [activeChat]);
@@ -116,7 +120,9 @@ export function useChatData({ token, currentUser, stompClient }) {
         }
 
         // 3. Αποστολή WebSocket ACK (READ)
-        if (stompClient?.connected && targetId && !String(targetId).startsWith('temp-')) {
+        const previousAckId = Number(lastReadAckRef.current.get(key) || 0);
+        if (stompClient?.connected && targetId && !String(targetId).startsWith('temp-') && Number(targetId) > previousAckId) {
+            lastReadAckRef.current.set(key, Number(targetId));
             console.debug("Sending READ Ack:", { chatId, targetId });
             stompClient.publish({
                 destination: "/app/chat.ack",
@@ -158,7 +164,9 @@ export function useChatData({ token, currentUser, stompClient }) {
         });
 
         // ✅ Αν είναι εισερχόμενο, στείλε DELIVERED Ack αμέσως
-        if (isIncoming && stompClient?.connected && messageId && !String(messageId).startsWith('temp-')) {
+        const previousDeliveredId = Number(lastDeliveredAckRef.current.get(key) || 0);
+        if (isIncoming && stompClient?.connected && messageId && !String(messageId).startsWith('temp-') && Number(messageId) > previousDeliveredId) {
+            lastDeliveredAckRef.current.set(key, Number(messageId));
             stompClient.publish({
                 destination: "/app/chat.ack",
                 body: JSON.stringify({
@@ -256,6 +264,10 @@ export function useChatData({ token, currentUser, stompClient }) {
     // ✅ Trigger Read when opening chat or receiving messages while open
     useEffect(() => {
         if (!currentChatId || !token) return;
+
+        requestedPagesRef.current.clear();
+        setMsgPage(0);
+        setHasMore(true);
 
         // Φέρνουμε μηνύματα
         // eslint-disable-next-line react-hooks/set-state-in-effect
