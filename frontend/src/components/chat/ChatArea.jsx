@@ -14,6 +14,7 @@ export default function ChatArea({
                                      messages,
                                      onLoadMore,
                                      hasMore,
+                                     isLoadingMessages,
                                      currentUser,
                                      token,
                                      setMessages,
@@ -228,6 +229,7 @@ export default function ChatArea({
                 scrollRef={scrollRef}
                 onScroll={handleScroll}
                 hasMore={hasMore}
+                isLoadingMessages={isLoadingMessages}
                 onLoadMore={handleLoadMore}
                 messages={messages}
                 currentUser={currentUser}

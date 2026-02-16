@@ -108,6 +108,7 @@ export function useChatTopics({
                         content: msgDto.content,
                         createdAt: msgDto.createdAt,
                         isIncoming,
+                        messageId: msgDto.id,
                     });
 
                     if (isActive) {

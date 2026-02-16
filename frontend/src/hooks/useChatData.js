@@ -11,6 +11,7 @@ export function useChatData({ token, currentUser, stompClient }) {
     const [messages, setMessages] = useState([]);
     const [msgPage, setMsgPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
+    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [currentUserId, setCurrentUserId] = useState(null);
 
     // ✅ NEW: State για τα Ticks (Read/Delivered IDs)
@@ -69,7 +70,8 @@ export function useChatData({ token, currentUser, stompClient }) {
     // ... (fetchMessages παραμένει ίδιο) ...
     const fetchMessages = useCallback(
         async (chatId, page = 0) => {
-            if (!token || !chatId) return;
+            if (!token || !chatId || isLoadingMessages) return;
+            setIsLoadingMessages(true);
             try {
                 const data = await apiJson(`/api/chats/${chatId}/messages?page=${page}&size=${MESSAGE_PAGE_SIZE}`, { token });
                 const raw = Array.isArray(data) ? data : data?.content || [];
@@ -84,9 +86,11 @@ export function useChatData({ token, currentUser, stompClient }) {
                 setMsgPage(page);
             } catch (err) {
                 console.error("Fetch messages failed:", err);
+            } finally {
+                setIsLoadingMessages(false);
             }
         },
-        [token]
+        [token, isLoadingMessages]
     );
 
     // 🚀 BEAST MODE UPDATE: WebSocket Ack αντί για REST API
@@ -273,7 +277,7 @@ export function useChatData({ token, currentUser, stompClient }) {
                 markChatRead(currentChatId, lastMsg.id);
             }
         }
-    }, [messages, currentChatId, currentUser, markChatRead]);
+    }, [messages, currentChatId, markChatRead]);
 
     const activeChatId = useMemo(() => activeChat?.conversationId || activeChat?.id, [activeChat]);
 
@@ -285,6 +289,7 @@ export function useChatData({ token, currentUser, stompClient }) {
         watermarks, // <--- EXPORTED STATE
         msgPage,
         hasMore,
+        isLoadingMessages,
         activeChatId,
         currentUserId,
 

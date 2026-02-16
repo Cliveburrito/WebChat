@@ -14,9 +14,7 @@
     display: flex;
     justify-content: center;
     margin: 20px 0;
-    position: sticky; /* Για να μένει στην κορυφή καθώς σκρολάρεις την ημέρα */
-    top: 5px;
-    z-index: 5;
+    position: static;
 }
 
 .date-divider span {

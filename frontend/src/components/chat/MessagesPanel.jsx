@@ -7,6 +7,7 @@ export default function MessagesPanel({
                                           scrollRef,
                                           onScroll,
                                           hasMore,
+                                          isLoadingMessages,
                                           onLoadMore,
                                           messages,
                                           currentUser,
@@ -74,8 +75,8 @@ export default function MessagesPanel({
             {/* Κουμπί για χειροκίνητο Load More (ως fallback) */}
             {hasMore && (
                 <div className="load-more-wrapper">
-                    <button className="load-more-btn" onClick={onLoadMore}>
-                        ↑ Load older messages
+                    <button className="load-more-btn" onClick={onLoadMore} disabled={isLoadingMessages}>
+                        {isLoadingMessages ? "Loading..." : "↑ Load older messages"}
                     </button>
                 </div>
             )}
