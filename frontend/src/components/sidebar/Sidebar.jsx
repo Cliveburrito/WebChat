@@ -39,7 +39,10 @@ export default function Sidebar({
 
             <div className="sidebar-content">
                 <div className="sidebar-section">
-                    <h4 className="sidebar-title">My Chats</h4>
+                    <div className="sidebar-header-row">
+                        <h4 className="sidebar-title">My Chats</h4>
+                        <span className="sidebar-subtitle">{conversations.length} chats</span>
+                    </div>
                     <div className="sidebar-list">
                         {/* Περνάμε τα props κάτω στο ChatList */}
                         <ChatList

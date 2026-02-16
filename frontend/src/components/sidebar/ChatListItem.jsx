@@ -27,6 +27,8 @@ export default function ChatListItem({ chat, activeChat, onSelectChat, onlineUse
     const isDirect = chat.isGroup === false;
     const isOnline = isDirect && onlineUsers.includes(chatTitle);
 
+    const unreadCount = Number(chat.unreadCount ?? chat.unread_count ?? 0);
+
     const timeDisplay = chat.lastMessageAt
         ? new Date(chat.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : "";
@@ -40,7 +42,7 @@ export default function ChatListItem({ chat, activeChat, onSelectChat, onlineUse
             <div className="chat-item-info">
                 <div className="chat-item-header">
                     <span className="chat-item-name">{chatTitle}</span>
-                    <span className={`chat-item-time ${chat.unreadCount > 0 ? "highlight" : ""}`}>
+                    <span className={`chat-item-time ${unreadCount > 0 ? "highlight" : ""}`}>
                         {timeDisplay}
                     </span>
                 </div>
@@ -56,8 +58,8 @@ export default function ChatListItem({ chat, activeChat, onSelectChat, onlineUse
 
                     <div className="chat-item-badges">
                         {chat.muted && <span className="mute-icon">🔕</span>}
-                        {chat.unreadCount > 0 && (
-                            <span className="unread-badge">{chat.unreadCount}</span>
+                        {unreadCount > 0 && (
+                            <span className="unread-badge">{unreadCount}</span>
                         )}
                     </div>
                 </div>

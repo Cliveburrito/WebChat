@@ -141,11 +141,13 @@ export function useChatData({ token, currentUser, stompClient }) {
                 lastContent: content,
                 lastMessageAt: createdAt || new Date().toISOString(),
                 unreadCount: isIncoming && !isActive
-                    ? Number(old.unreadCount || 0) + 1
+                    ? Number(old.unreadCount || old.unread_count || 0) + 1
                     : isActive
                         ? 0
-                        : old.unreadCount,
+                        : Number(old.unreadCount || old.unread_count || 0),
             };
+
+            updated.unread_count = updated.unreadCount;
 
             const rest = prev.filter((_, i) => i !== idx);
             return [updated, ...rest];
