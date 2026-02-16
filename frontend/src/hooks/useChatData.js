@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiJson } from "../api/apiJson";
 
+const MESSAGE_PAGE_SIZE = 50;
+
 // 🚀 BEAST MODE UPDATE: Προσθέσαμε το stompClient στα props
 export function useChatData({ token, currentUser, stompClient }) {
     const [conversations, setConversations] = useState([]);
@@ -69,7 +71,7 @@ export function useChatData({ token, currentUser, stompClient }) {
         async (chatId, page = 0) => {
             if (!token || !chatId) return;
             try {
-                const data = await apiJson(`/api/chats/${chatId}/messages?page=${page}&size=50`, { token });
+                const data = await apiJson(`/api/chats/${chatId}/messages?page=${page}&size=${MESSAGE_PAGE_SIZE}`, { token });
                 const raw = Array.isArray(data) ? data : data?.content || [];
                 const sorted = raw
                     .slice()
@@ -78,7 +80,7 @@ export function useChatData({ token, currentUser, stompClient }) {
                 if (page === 0) setMessages(sorted);
                 else setMessages((prev) => [...sorted, ...prev]);
 
-                setHasMore(raw.length === 20);
+                setHasMore(raw.length === MESSAGE_PAGE_SIZE);
                 setMsgPage(page);
             } catch (err) {
                 console.error("Fetch messages failed:", err);
@@ -250,6 +252,7 @@ export function useChatData({ token, currentUser, stompClient }) {
         if (!currentChatId || !token) return;
 
         // Φέρνουμε μηνύματα
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchMessages(currentChatId, 0);
 
         // Στέλνουμε Read Ack για το τελευταίο μήνυμα (αν υπάρχει στη λίστα)
@@ -264,6 +267,7 @@ export function useChatData({ token, currentUser, stompClient }) {
             const lastMsg = messages[messages.length - 1];
             // Μόνο αν δεν είναι δικό μας και δεν το έχουμε ήδη διαβάσει (προαιρετικό check)
             if (lastMsg.senderUsername !== currentUser) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 markChatRead(currentChatId, lastMsg.id);
             }
         }

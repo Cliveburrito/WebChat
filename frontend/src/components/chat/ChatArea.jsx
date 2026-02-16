@@ -48,6 +48,16 @@ export default function ChatArea({
         return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
     };
 
+    const handleLoadMore = useCallback(() => {
+        if (!hasMore || !scrollRef.current || isPrependingRef.current) return;
+
+        prevScrollHeightRef.current = scrollRef.current.scrollHeight;
+        isPrependingRef.current = true;
+        shouldAutoScrollRef.current = false;
+
+        onLoadMore?.();
+    }, [hasMore, onLoadMore]);
+
     const handleScroll = useCallback(() => {
         if (scrollRef.current) {
             shouldAutoScrollRef.current = isNearBottom(scrollRef.current);
@@ -57,7 +67,7 @@ export default function ChatArea({
                 handleLoadMore();
             }
         }
-    }, [hasMore]);
+    }, [hasMore, handleLoadMore]);
 
     useLayoutEffect(() => {
         const el = scrollRef.current;
@@ -73,16 +83,6 @@ export default function ChatArea({
             el.scrollTop = el.scrollHeight;
         }
     }, [messages]);
-
-    const handleLoadMore = useCallback(() => {
-        if (!hasMore || !scrollRef.current || isPrependingRef.current) return;
-
-        prevScrollHeightRef.current = scrollRef.current.scrollHeight;
-        isPrependingRef.current = true;
-        shouldAutoScrollRef.current = false;
-
-        onLoadMore?.();
-    }, [hasMore, onLoadMore]);
 
     // --- 🟡 TYPING LOGIC ---
     const clearRemoteTyping = useCallback(() => {
@@ -143,7 +143,7 @@ export default function ChatArea({
 
             try {
                 await apiForm("/api/files/upload", { token, formData });
-            } catch (err) {
+            } catch {
                 setMessages(prev => prev.map(m => m.id === confirmed.id ? { ...m, status: "ATTACH_FAILED" } : m));
             }
         });
@@ -207,7 +207,7 @@ export default function ChatArea({
                 body: JSON.stringify({ content: trimmed, tempId }),
             });
             if (!res.ok) throw new Error();
-        } catch (err) {
+        } catch {
             setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "FAILED" } : m));
         }
     };

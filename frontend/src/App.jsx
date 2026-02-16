@@ -14,7 +14,7 @@ import { useChatTopics } from "./hooks/useChatTopics";
 import "./App.css"; // Σιγουρέψου ότι το import είναι εδώ
 
 function App() {
-    const { token, currentUser, currentUserId, authView, setAuthView, isAuthed, loginSuccess, logout } = useAuth();
+    const { token, currentUser, authView, setAuthView, isAuthed, loginSuccess, logout } = useAuth();
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
     const [stealthMode, setStealthMode] = useState(false);
 
@@ -43,6 +43,7 @@ function App() {
         markChatRead,
         onWatermarkUpdate,
         activeChatId,
+        currentUserId,
     } = useChatData({ token, currentUser, stompClient });
 
     // 3. Live Subscriptions
