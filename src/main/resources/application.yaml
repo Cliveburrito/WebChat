@@ -74,3 +74,7 @@ application:
     location: ${STORAGE_PATH:uploads}
     max-file-size: 15728640 # 15MB in bytes
 
+
+  websocket:
+    allowed-origins:
+      - ${WS_ALLOWED_ORIGIN:http://localhost:5173}

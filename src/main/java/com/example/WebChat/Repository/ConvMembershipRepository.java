@@ -53,6 +53,7 @@ public interface ConvMembershipRepository extends JpaRepository<ConvMembership, 
              FROM messages m_unread
              WHERE m_unread.conversation_id = c.conversationid
              AND m_unread.id > COALESCE(me.last_read_message_id, 0)
+             AND m_unread.sender_id <> :userId
             ) AS unreadCount,
         
             me.muted AS muted,

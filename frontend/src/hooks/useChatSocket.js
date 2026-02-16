@@ -73,7 +73,7 @@ export function useChatSocket({ token, username, onPresenceUpdate, debug = false
             client.deactivate();
             setStompClient(null);
         };
-    }, [token, username]);
+    }, [token, username, debug, onPresenceUpdate]);
 
     return { stompClient, onlineUsers };
 }

@@ -40,6 +40,7 @@ import java.util.Collection;
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final JwtService jwtService;
+    private final AppProperties appProperties;
 
     /**
      * Configures the message broker, which is responsible for routing messages
@@ -78,9 +79,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
         // WebSocket endpoint: ws://<host>/ws with SockJS fallback
         // client needs to connect for the webSocket handshake
-        registry.addEndpoint("/ws").
-                setAllowedOrigins("http://localhost:5173").
-                withSockJS()
+        String[] allowedOrigins = appProperties.getWebsocket()
+                .getAllowedOrigins()
+                .toArray(String[]::new);
+
+        registry.addEndpoint("/ws")
+                .setAllowedOrigins(allowedOrigins)
+                .withSockJS()
                 .setHeartbeatTime(10000);
     }
 

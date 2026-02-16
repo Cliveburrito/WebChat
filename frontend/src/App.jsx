@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import Sidebar from "./components/sidebar/Sidebar";
 import ChatArea from "./components/chat/ChatArea";
 import RightSidebar from "./components/sidebar/RightSidebar";
+import Avatar from "./components/common/Avatar";
 
 import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
@@ -14,7 +15,7 @@ import { useChatTopics } from "./hooks/useChatTopics";
 import "./App.css"; // Σιγουρέψου ότι το import είναι εδώ
 
 function App() {
-    const { token, currentUser, currentUserId, authView, setAuthView, isAuthed, loginSuccess, logout } = useAuth();
+    const { token, currentUser, authView, setAuthView, isAuthed, loginSuccess, logout } = useAuth();
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
     const [stealthMode, setStealthMode] = useState(false);
 
@@ -43,6 +44,7 @@ function App() {
         markChatRead,
         onWatermarkUpdate,
         activeChatId,
+        currentUserId,
     } = useChatData({ token, currentUser, stompClient });
 
     // 3. Live Subscriptions
@@ -87,7 +89,11 @@ function App() {
             {/* GLOBAL HEADER */}
             <header className="main-header">
                 <div className="brand">
-                    <strong>WebChat</strong> <span className="user-tag">| {currentUser}</span>
+                    <Avatar name={currentUser} size={34} />
+                    <div className="brand-text">
+                        <strong>WebChat</strong>
+                        <span className="user-tag">@{currentUser}</span>
+                    </div>
                 </div>
 
                 <div className="header-controls">
