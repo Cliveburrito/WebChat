@@ -94,52 +94,15 @@ body, html, #root {
 }
 
 
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-main);
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-}
-
-.user-tag {
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-  font-weight: 500;
-}
-
-.sidebar-section {
-  padding: 10px 0;
-}
-
-.sidebar-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 16px 8px;
-}
-
-.sidebar-title {
-  margin: 0;
-  font-size: 0.95rem;
-  color: var(--text-main);
-}
-
-.sidebar-subtitle {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-}
-
 .header-controls {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.brand .user-tag {
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 /* =========================================
