@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import Sidebar from "./components/sidebar/Sidebar";
 import ChatArea from "./components/chat/ChatArea";
 import RightSidebar from "./components/sidebar/RightSidebar";
-import Avatar from "./components/common/Avatar";
 
 import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
@@ -34,7 +33,6 @@ function App() {
         watermarks,
         msgPage,
         hasMore,
-        isLoadingMessages,
         setActiveChat,
         setMessages,
         fetchMessages,
@@ -90,11 +88,7 @@ function App() {
             {/* GLOBAL HEADER */}
             <header className="main-header">
                 <div className="brand">
-                    <Avatar name={currentUser} size={34} />
-                    <div className="brand-text">
-                        <strong>WebChat</strong>
-                        <span className="user-tag">@{currentUser}</span>
-                    </div>
+                    <strong>WebChat</strong> <span className="user-tag">| {currentUser}</span>
                 </div>
 
                 <div className="header-controls">
@@ -133,7 +127,6 @@ function App() {
                     activeChat={activeChat}
                     messages={messages}
                     hasMore={hasMore}
-                    isLoadingMessages={isLoadingMessages}
                     onLoadMore={() => fetchMessages(activeChatId, msgPage + 1)}
                     currentUser={currentUser}
                     token={token}

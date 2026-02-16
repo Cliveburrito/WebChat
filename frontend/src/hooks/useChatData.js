@@ -74,13 +74,7 @@ export function useChatData({ token, currentUser, stompClient }) {
     // ... (fetchMessages παραμένει ίδιο) ...
     const fetchMessages = useCallback(
         async (chatId, page = 0) => {
-            if (!token || !chatId) return;
-
-            const dedupeKey = `${normalizeId(chatId)}:${page}`;
-            if (requestedPagesRef.current.has(dedupeKey)) return;
-
-            requestedPagesRef.current.add(dedupeKey);
-            inFlightRequestsRef.current += 1;
+            if (!token || !chatId || isLoadingMessages) return;
             setIsLoadingMessages(true);
             try {
                 const data = await apiJson(`/api/chats/${chatId}/messages?page=${page}&size=${MESSAGE_PAGE_SIZE}`, { token });
@@ -97,12 +91,10 @@ export function useChatData({ token, currentUser, stompClient }) {
             } catch (err) {
                 console.error("Fetch messages failed:", err);
             } finally {
-                requestedPagesRef.current.delete(dedupeKey);
-                inFlightRequestsRef.current = Math.max(0, inFlightRequestsRef.current - 1);
-                setIsLoadingMessages(inFlightRequestsRef.current > 0);
+                setIsLoadingMessages(false);
             }
         },
-        [token]
+        [token, isLoadingMessages]
     );
 
     // 🚀 BEAST MODE UPDATE: WebSocket Ack αντί για REST API
@@ -278,6 +270,7 @@ export function useChatData({ token, currentUser, stompClient }) {
         setHasMore(true);
 
         // Φέρνουμε μηνύματα
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchMessages(currentChatId, 0);
 
         // Στέλνουμε Read Ack για το τελευταίο μήνυμα (αν υπάρχει στη λίστα)
@@ -290,7 +283,9 @@ export function useChatData({ token, currentUser, stompClient }) {
     useEffect(() => {
         if (currentChatId && messages.length > 0) {
             const lastMsg = messages[messages.length - 1];
-            if (lastMsg?.id && !String(lastMsg.id).startsWith("temp-")) {
+            // Μόνο αν δεν είναι δικό μας και δεν το έχουμε ήδη διαβάσει (προαιρετικό check)
+            if (lastMsg.senderUsername !== currentUser) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 markChatRead(currentChatId, lastMsg.id);
             }
         }

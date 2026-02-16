@@ -14,6 +14,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
@@ -48,17 +49,7 @@ public class ChatController {
     }
 
     @MessageMapping("/chat.ack")
-    public void processAck(@Payload MessageAckDTO ack, Authentication authentication) {
-        if (ack == null || ack.conversationId() == null || ack.messageId() == null || ack.type() == null) {
-            log.warn("Ignoring malformed ACK payload: {}", ack);
-            return;
-        }
-
-        if (authentication == null || !(authentication.getPrincipal() instanceof CustomPrincipal principal)) {
-            log.warn("Ignoring ACK without authenticated principal for conversation {}", ack.conversationId());
-            return;
-        }
-
+    public void processAck(@Payload MessageAckDTO ack, @AuthenticationPrincipal CustomPrincipal principal) {
         // 2. BROADCAST to the conversation topic
         // This notifies the SENDER (and other members) to turn their ticks blue/grey
         WatermarkUpdateEvent update = new WatermarkUpdateEvent(
@@ -67,7 +58,7 @@ public class ChatController {
                 ack.messageId(),
                 ack.type()
         );
-        log.debug("ACK received from user {} for chat {} ({})", principal.username(), ack.conversationId(), ack.type());
+        log.info("ACK RECEIVED");
 
         messageService.handleMessageAck(update);
 
