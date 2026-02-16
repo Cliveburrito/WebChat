@@ -7,6 +7,7 @@ export default function MessagesPanel({
                                           scrollRef,
                                           onScroll,
                                           hasMore,
+                                          isLoadingMessages,
                                           onLoadMore,
                                           messages,
                                           currentUser,
@@ -17,13 +18,8 @@ export default function MessagesPanel({
     const currentChatWatermarks = watermarks?.[activeChatId] || {};
 
     // --- Logic για αυτόματο Load More στο Scroll ---
-    const handleScrollInternal = (e) => {
-        const el = e.target;
-        // Αν φτάσαμε στην κορυφή (scrollTop === 0) και υπάρχουν κι άλλα μηνύματα
-        if (el.scrollTop === 0 && hasMore) {
-            onLoadMore();
-        }
-        // Καλούμε και το onScroll του ChatArea για το auto-scroll logic
+    const handleScrollInternal = () => {
+        // Το load more ελέγχεται κεντρικά από το ChatArea για να αποφεύγουμε διπλά requests.
         onScroll();
     };
 
@@ -79,8 +75,8 @@ export default function MessagesPanel({
             {/* Κουμπί για χειροκίνητο Load More (ως fallback) */}
             {hasMore && (
                 <div className="load-more-wrapper">
-                    <button className="load-more-btn" onClick={onLoadMore}>
-                        ↑ Load older messages
+                    <button className="load-more-btn" onClick={onLoadMore} disabled={isLoadingMessages}>
+                        {isLoadingMessages ? "Loading..." : "↑ Load older messages"}
                     </button>
                 </div>
             )}

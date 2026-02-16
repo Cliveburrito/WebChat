@@ -5,26 +5,75 @@
     padding: 0 10px;
 }
 
+.message-wrapper.me {
+    justify-content: flex-end;
+}
+
+.message-wrapper.other {
+    justify-content: flex-start;
+}
+
 .message-bubble {
-    max-width: 70%;
+    max-width: min(72%, 640px);
     padding: 8px 12px;
     border-radius: 15px;
     position: relative;
-    /* 🚀 ΤΟ ΚΛΕΙΔΙ ΓΙΑ ΤΟ OVERFLOW: */
     word-break: break-word;
     overflow-wrap: anywhere;
     display: flex;
     flex-direction: column;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
 }
 
-/* Fix για τα ονόματα των αρχείων (Ellipsis) */
+.message-wrapper.me .message-bubble {
+    background: #d9fdd3;
+    border-top-right-radius: 6px;
+}
+
+.message-wrapper.other .message-bubble {
+    background: var(--bg-sidebar);
+    border-top-left-radius: 6px;
+}
+
+.message-sender {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--primary-blue);
+    margin-bottom: 2px;
+}
+
+.message-text {
+    color: var(--text-main);
+}
+
+.attachments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.attachment-item {
+    max-width: 100%;
+}
+
+.attachment-img {
+    max-width: min(100%, 360px);
+    border-radius: 10px;
+    display: block;
+}
+
+.attachment-img.pending {
+    opacity: 0.7;
+}
+
 .attachment-pill {
     display: inline-block;
-    max-width: 100%; /* Για να μην βγαίνει από το bubble */
+    max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis; /* Βάζει ... στο τέλος */
-    background: rgba(0,0,0,0.05);
+    text-overflow: ellipsis;
+    background: rgba(0, 0, 0, 0.05);
     padding: 5px 10px;
     border-radius: 10px;
     text-decoration: none;
@@ -34,7 +83,7 @@
 
 .message-row {
     display: flex;
-    flex-direction: column; /* Τα ticks κάτω από το κείμενο αν είναι μεγάλο */
+    flex-direction: column;
     gap: 2px;
 }
 
@@ -44,6 +93,24 @@
     justify-content: flex-end;
     gap: 4px;
     font-size: 0.7rem;
-    align-self: flex-end; /* Πάντα κάτω δεξιά */
+    align-self: flex-end;
     margin-top: 2px;
+    color: var(--text-secondary);
+}
+
+.status-icon {
+    vertical-align: middle;
+}
+
+.status-icon.sent,
+.status-icon.delivered {
+    color: #8696a0;
+}
+
+.status-icon.read {
+    color: #53bdeb;
+}
+
+.status-icon.pending {
+    color: #8696a0;
 }

@@ -9,7 +9,7 @@ export function useChatTopics({
                                   bumpConversation,
                                   markChatRead,
                                   onWatermarkUpdate, // <--- Η νέα προσθήκη για τα live ticks
-                                  debug = true,
+                                  debug = false,
                               }) {
     const subsRef = useRef(new Map());
 
@@ -34,21 +34,21 @@ export function useChatTopics({
         };
     });
 
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const conversationIdsKey = useMemo(() => {
         return (conversations || [])
             .map((c) => String(c.conversationId ?? c.id))
             .sort()
             .join(",");
-    }, [conversations.length]);
+    }, [conversations]);
 
     useEffect(() => {
         if (!stompClient?.connected) return;
 
         const ids = conversationIdsKey.split(",").filter(Boolean);
+        const subs = subsRef.current;
 
         for (const id of ids) {
-            if (subsRef.current.has(id)) continue;
+            if (subs.has(id)) continue;
 
             const topic = `/topic/chat/${id}`;
             const sub = stompClient.subscribe(topic, (frame) => {
@@ -108,6 +108,7 @@ export function useChatTopics({
                         content: msgDto.content,
                         createdAt: msgDto.createdAt,
                         isIncoming,
+                        messageId: msgDto.id,
                     });
 
                     if (isActive) {
@@ -125,15 +126,22 @@ export function useChatTopics({
                 }
             });
 
-            subsRef.current.set(id, sub);
+            subs.set(id, sub);
             if (debug) console.debug("Subscribed to chat:", id);
         }
 
-        for (const [id, sub] of subsRef.current.entries()) {
+        for (const [id, sub] of subs.entries()) {
             if (!ids.includes(id)) {
                 sub.unsubscribe();
-                subsRef.current.delete(id);
+                subs.delete(id);
             }
         }
-    }, [stompClient?.connected, conversationIdsKey]);
+
+        return () => {
+            for (const [, sub] of subs.entries()) {
+                sub.unsubscribe();
+            }
+            subs.clear();
+        };
+    }, [stompClient, conversationIdsKey, debug]);
 }

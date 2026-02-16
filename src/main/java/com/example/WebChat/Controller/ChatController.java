@@ -70,12 +70,13 @@ public class ChatController {
      */
     @MessageMapping("/chat/{conversationId}/typing")
     public void handleTyping(@DestinationVariable Long conversationId,
+                             @Payload String payload,
                              Authentication authentication) {
         if (authentication != null && authentication.getPrincipal() instanceof CustomPrincipal principal) {
-            String username = principal.username();
+            String typingSignal = "__STOP__".equals(payload) ? "__STOP__" : principal.username();
 
-            messagingTemplate.convertAndSend("/topic/chat/" + conversationId + "/typing", username);
-            log.info("Typing...");
+            messagingTemplate.convertAndSend("/topic/chat/" + conversationId + "/typing", typingSignal);
+            log.debug("Typing signal from {} in chat {}", principal.username(), conversationId);
         }
     }
 
