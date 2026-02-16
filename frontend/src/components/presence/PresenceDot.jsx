@@ -1,3 +1,4 @@
+import "./PresenceDot.css";
 export default function PresenceDot({ online, size = 10, className = "" }) {
     return (
         <span

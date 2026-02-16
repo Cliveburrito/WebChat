@@ -4,7 +4,10 @@ export default function RightSidebar({ users, currentUser, onOpenDirectChat, onl
     return (
         <aside className="sidebar right">
             <div className="sidebar-section">
-                <h4 className="sidebar-title">Global Directory</h4>
+                <div className="sidebar-header-row">
+                    <h4 className="sidebar-title">Global Directory</h4>
+                    <span className="sidebar-subtitle">{users.filter(u => u.username !== currentUser).length} users</span>
+                </div>
                 <div className="sidebar-list">
                     {users.filter(u => u.username !== currentUser).map(u => {
                         const isOnline = onlineUsers.includes(u.username);

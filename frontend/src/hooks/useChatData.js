@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiJson } from "../api/apiJson";
 
+const MESSAGE_PAGE_SIZE = 50;
+
 // 🚀 BEAST MODE UPDATE: Προσθέσαμε το stompClient στα props
 export function useChatData({ token, currentUser, stompClient }) {
     const [conversations, setConversations] = useState([]);
@@ -9,6 +11,7 @@ export function useChatData({ token, currentUser, stompClient }) {
     const [messages, setMessages] = useState([]);
     const [msgPage, setMsgPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
+    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [currentUserId, setCurrentUserId] = useState(null);
 
     // ✅ NEW: State για τα Ticks (Read/Delivered IDs)
@@ -16,6 +19,10 @@ export function useChatData({ token, currentUser, stompClient }) {
     const [watermarks, setWatermarks] = useState({});
 
     const activeChatRef = useRef(null);
+    const inFlightRequestsRef = useRef(0);
+    const requestedPagesRef = useRef(new Set());
+    const lastReadAckRef = useRef(new Map());
+    const lastDeliveredAckRef = useRef(new Map());
     useEffect(() => {
         activeChatRef.current = activeChat;
     }, [activeChat]);
@@ -68,8 +75,15 @@ export function useChatData({ token, currentUser, stompClient }) {
     const fetchMessages = useCallback(
         async (chatId, page = 0) => {
             if (!token || !chatId) return;
+
+            const dedupeKey = `${normalizeId(chatId)}:${page}`;
+            if (requestedPagesRef.current.has(dedupeKey)) return;
+
+            requestedPagesRef.current.add(dedupeKey);
+            inFlightRequestsRef.current += 1;
+            setIsLoadingMessages(true);
             try {
-                const data = await apiJson(`/api/chats/${chatId}/messages?page=${page}&size=50`, { token });
+                const data = await apiJson(`/api/chats/${chatId}/messages?page=${page}&size=${MESSAGE_PAGE_SIZE}`, { token });
                 const raw = Array.isArray(data) ? data : data?.content || [];
                 const sorted = raw
                     .slice()
@@ -78,10 +92,14 @@ export function useChatData({ token, currentUser, stompClient }) {
                 if (page === 0) setMessages(sorted);
                 else setMessages((prev) => [...sorted, ...prev]);
 
-                setHasMore(raw.length === 20);
+                setHasMore(raw.length === MESSAGE_PAGE_SIZE);
                 setMsgPage(page);
             } catch (err) {
                 console.error("Fetch messages failed:", err);
+            } finally {
+                requestedPagesRef.current.delete(dedupeKey);
+                inFlightRequestsRef.current = Math.max(0, inFlightRequestsRef.current - 1);
+                setIsLoadingMessages(inFlightRequestsRef.current > 0);
             }
         },
         [token]
@@ -110,7 +128,9 @@ export function useChatData({ token, currentUser, stompClient }) {
         }
 
         // 3. Αποστολή WebSocket ACK (READ)
-        if (stompClient?.connected && targetId && !String(targetId).startsWith('temp-')) {
+        const previousAckId = Number(lastReadAckRef.current.get(key) || 0);
+        if (stompClient?.connected && targetId && !String(targetId).startsWith('temp-') && Number(targetId) > previousAckId) {
+            lastReadAckRef.current.set(key, Number(targetId));
             console.debug("Sending READ Ack:", { chatId, targetId });
             stompClient.publish({
                 destination: "/app/chat.ack",
@@ -139,18 +159,22 @@ export function useChatData({ token, currentUser, stompClient }) {
                 lastContent: content,
                 lastMessageAt: createdAt || new Date().toISOString(),
                 unreadCount: isIncoming && !isActive
-                    ? Number(old.unreadCount || 0) + 1
+                    ? Number(old.unreadCount || old.unread_count || 0) + 1
                     : isActive
                         ? 0
-                        : old.unreadCount,
+                        : Number(old.unreadCount || old.unread_count || 0),
             };
+
+            updated.unread_count = updated.unreadCount;
 
             const rest = prev.filter((_, i) => i !== idx);
             return [updated, ...rest];
         });
 
         // ✅ Αν είναι εισερχόμενο, στείλε DELIVERED Ack αμέσως
-        if (isIncoming && stompClient?.connected && messageId && !String(messageId).startsWith('temp-')) {
+        const previousDeliveredId = Number(lastDeliveredAckRef.current.get(key) || 0);
+        if (isIncoming && stompClient?.connected && messageId && !String(messageId).startsWith('temp-') && Number(messageId) > previousDeliveredId) {
+            lastDeliveredAckRef.current.set(key, Number(messageId));
             stompClient.publish({
                 destination: "/app/chat.ack",
                 body: JSON.stringify({
@@ -249,6 +273,10 @@ export function useChatData({ token, currentUser, stompClient }) {
     useEffect(() => {
         if (!currentChatId || !token) return;
 
+        requestedPagesRef.current.clear();
+        setMsgPage(0);
+        setHasMore(true);
+
         // Φέρνουμε μηνύματα
         fetchMessages(currentChatId, 0);
 
@@ -262,12 +290,11 @@ export function useChatData({ token, currentUser, stompClient }) {
     useEffect(() => {
         if (currentChatId && messages.length > 0) {
             const lastMsg = messages[messages.length - 1];
-            // Μόνο αν δεν είναι δικό μας και δεν το έχουμε ήδη διαβάσει (προαιρετικό check)
-            if (lastMsg.senderUsername !== currentUser) {
+            if (lastMsg?.id && !String(lastMsg.id).startsWith("temp-")) {
                 markChatRead(currentChatId, lastMsg.id);
             }
         }
-    }, [messages, currentChatId, currentUser, markChatRead]);
+    }, [messages, currentChatId, markChatRead]);
 
     const activeChatId = useMemo(() => activeChat?.conversationId || activeChat?.id, [activeChat]);
 
@@ -279,6 +306,7 @@ export function useChatData({ token, currentUser, stompClient }) {
         watermarks, // <--- EXPORTED STATE
         msgPage,
         hasMore,
+        isLoadingMessages,
         activeChatId,
         currentUserId,
 

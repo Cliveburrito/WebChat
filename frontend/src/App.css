@@ -6,6 +6,7 @@
   --bg-sidebar: #ffffff;
   --bg-header: #f0f2f5;
   --bg-chat-area: #efeae2;
+  --bg-main: #f8fafc;
   --border-color: #e9edef;
   --text-main: #111b21;
   --text-secondary: #667781;
@@ -17,6 +18,7 @@
   --bg-sidebar: #111b21;
   --bg-header: #202c33;
   --bg-chat-area: #0b141a;
+  --bg-main: #111b21;
   --border-color: #222d34;
   --text-main: #e9edef;
   --text-secondary: #8696a0;
@@ -89,6 +91,59 @@ body, html, #root {
   background: var(--bg-chat-area);
   position: relative;
   min-width: 0; /* Εμποδίζει το "σπρώξιμο" του layout από μεγάλα κείμενα */
+}
+
+
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-main);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.user-tag {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.sidebar-section {
+  padding: 12px 10px;
+}
+
+.sidebar-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  margin: 0 6px 10px;
+  background: color-mix(in srgb, var(--bg-sidebar) 88%, var(--primary-blue) 12%);
+}
+
+.sidebar-title {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-main);
+}
+
+.sidebar-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 /* =========================================

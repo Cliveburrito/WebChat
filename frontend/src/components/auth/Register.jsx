@@ -74,7 +74,7 @@ export default function Register({ onRegisterSuccess, onGoToLogin }) {
                     </div>
 
                     <button type="submit" className="login-btn-primary" disabled={isLoading}>
-                        {isLoading ? "Επεξεργασία..." : "Εγγραφή"}
+                        {isLoading ? "Εγγραφή..." : "Εγγραφή"}
                     </button>
                 </form>
 

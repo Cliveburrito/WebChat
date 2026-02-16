@@ -1,0 +1,15 @@
+.status-dot {
+    display: inline-block;
+    border-radius: 999px;
+    flex-shrink: 0;
+    border: 2px solid var(--bg-sidebar);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.status-dot.online {
+    background: #25d366;
+}
+
+.status-dot.offline {
+    background: #b7c1c7;
+}
