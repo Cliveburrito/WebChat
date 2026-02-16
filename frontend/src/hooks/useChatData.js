@@ -258,6 +258,7 @@ export function useChatData({ token, currentUser, stompClient }) {
         if (!currentChatId || !token) return;
 
         // Φέρνουμε μηνύματα
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchMessages(currentChatId, 0);
 
         // Στέλνουμε Read Ack για το τελευταίο μήνυμα (αν υπάρχει στη λίστα)
@@ -270,7 +271,9 @@ export function useChatData({ token, currentUser, stompClient }) {
     useEffect(() => {
         if (currentChatId && messages.length > 0) {
             const lastMsg = messages[messages.length - 1];
-            if (lastMsg?.id && !String(lastMsg.id).startsWith("temp-")) {
+            // Μόνο αν δεν είναι δικό μας και δεν το έχουμε ήδη διαβάσει (προαιρετικό check)
+            if (lastMsg.senderUsername !== currentUser) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 markChatRead(currentChatId, lastMsg.id);
             }
         }

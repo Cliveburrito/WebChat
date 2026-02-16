@@ -50,14 +50,14 @@ export default function ChatArea({
     };
 
     const handleLoadMore = useCallback(() => {
-        if (!hasMore || isLoadingMessages || !scrollRef.current || isPrependingRef.current) return;
+        if (!hasMore || !scrollRef.current || isPrependingRef.current) return;
 
         prevScrollHeightRef.current = scrollRef.current.scrollHeight;
         isPrependingRef.current = true;
         shouldAutoScrollRef.current = false;
 
         onLoadMore?.();
-    }, [hasMore, isLoadingMessages, onLoadMore]);
+    }, [hasMore, onLoadMore]);
 
     const handleScroll = useCallback(() => {
         if (scrollRef.current) {
