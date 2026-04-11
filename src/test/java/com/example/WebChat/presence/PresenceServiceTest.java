@@ -23,6 +23,7 @@ class PresenceServiceTest {
 
     @Mock StringRedisTemplate redisTemplate;
     @Mock SimpMessagingTemplate messagingTemplate;
+    @Mock com.example.WebChat.user.UserRepository userRepository;
 
     @Mock SetOperations<String, String> setOperations;
     @Mock ValueOperations<String, String> valueOperations;
@@ -99,6 +100,7 @@ class PresenceServiceTest {
 
             verify(setOperations).remove(REDIS_SET_KEY, TEST_USERNAME);
             verify(redisTemplate).delete(HEARTBEAT_PREFIX + TEST_USERNAME);
+            verify(userRepository).touchLastSeenAt(TEST_USERNAME);
             verify(messagingTemplate).convertAndSend(eq("/topic/public/presence"), any(Set.class));
         }
 
@@ -111,6 +113,7 @@ class PresenceServiceTest {
 
             verify(setOperations).remove(REDIS_SET_KEY, TEST_USERNAME);
             verify(redisTemplate).delete(HEARTBEAT_PREFIX + TEST_USERNAME);
+            verify(userRepository).touchLastSeenAt(TEST_USERNAME);
             verify(messagingTemplate).convertAndSend(eq("/topic/public/presence"), any(Set.class));
         }
     }
@@ -228,6 +231,8 @@ class PresenceServiceTest {
 
             verify(setOperations).remove(REDIS_SET_KEY, "user2");
             verify(setOperations).remove(REDIS_SET_KEY, "user3");
+            verify(userRepository).touchLastSeenAt("user2");
+            verify(userRepository).touchLastSeenAt("user3");
             verify(setOperations, never()).remove(REDIS_SET_KEY, "user1");
 
             verify(messagingTemplate).convertAndSend(eq("/topic/public/presence"), any(Set.class));

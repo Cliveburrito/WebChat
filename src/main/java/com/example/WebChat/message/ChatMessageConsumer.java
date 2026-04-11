@@ -78,7 +78,10 @@ public class ChatMessageConsumer {
                             event.conversationId(),
                             msg.getReplyToMessage() == null ? null : msg.getReplyToMessage().getId(),
                             msg.getReplyToMessage() == null ? null : msg.getReplyToMessage().getSender().getUsername(),
-                            msg.getReplyToMessage() == null ? null : msg.getReplyToMessage().getMessage(),
+                            msg.getReplyToMessage() == null ? null : msg.getReplyToMessage().isDeleted() ? "Message deleted" : msg.getReplyToMessage().getMessage(),
+                            msg.getEditedAt(),
+                            msg.getDeletedAt(),
+                            msg.isDeleted(),
                             List.of(),
                             List.of()
                     );
@@ -161,7 +164,10 @@ public class ChatMessageConsumer {
                                 task.conversationId(),
                                 message.getReplyToMessage() == null ? null : message.getReplyToMessage().getId(),
                                 message.getReplyToMessage() == null ? null : message.getReplyToMessage().getSender().getUsername(),
-                                message.getReplyToMessage() == null ? null : message.getReplyToMessage().getMessage(),
+                                message.getReplyToMessage() == null ? null : message.getReplyToMessage().isDeleted() ? "Message deleted" : message.getReplyToMessage().getMessage(),
+                                message.getEditedAt(),
+                                message.getDeletedAt(),
+                                message.isDeleted(),
                                 List.of(),
                                 attachmentDtos
                         );

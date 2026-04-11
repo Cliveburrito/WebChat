@@ -36,6 +36,12 @@ public class User implements Serializable {
 
     private Instant lastSeenAt;
 
+    @Column(length = 80)
+    private String displayName;
+
+    @Column(length = 280)
+    private String bio;
+
     private String avatarUrl;
 
     @Column(nullable = false)

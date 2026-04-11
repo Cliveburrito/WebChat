@@ -9,6 +9,7 @@ export function useChatTopics({
                                   activeChatId,
                                   setMessages,
                                   bumpConversation,
+                                  updateConversationMessagePreview,
                                   queueAck,
                                   markChatRead,
                                   upsertConversation,
@@ -22,6 +23,7 @@ export function useChatTopics({
     // Προσθέτουμε το onWatermarkUpdate στο callbacksRef για να το έχουμε φρέσκο
     const callbacksRef = useRef({
         bumpConversation,
+        updateConversationMessagePreview,
         queueAck,
         markChatRead,
         setMessages,
@@ -37,6 +39,7 @@ export function useChatTopics({
     useEffect(() => {
         callbacksRef.current = {
             bumpConversation,
+            updateConversationMessagePreview,
             queueAck,
             markChatRead,
             setMessages,
@@ -165,7 +168,51 @@ export function useChatTopics({
                     return;
                 }
 
-                // 4) Attachment Linked
+                // 4) Message lifecycle updates
+                if (payload?.type === "MESSAGE_EDITED" || payload?.type === "MESSAGE_DELETED") {
+                    callbacksRef.current.setMessages?.((prev) =>
+                        prev.map((m) => {
+                            if (String(m.id) === String(payload.messageId)) {
+                                if (payload.type === "MESSAGE_DELETED") {
+                                    return {
+                                        ...m,
+                                        content: "",
+                                        attachments: [],
+                                        reactions: [],
+                                        deleted: true,
+                                        deletedAt: payload.deletedAt || new Date().toISOString(),
+                                    };
+                                }
+
+                                return {
+                                    ...m,
+                                    content: payload.content ?? m.content,
+                                    editedAt: payload.editedAt || new Date().toISOString(),
+                                };
+                            }
+
+                            if (String(m.replyToMessageId) === String(payload.messageId)) {
+                                return {
+                                    ...m,
+                                    replyToContent: payload.type === "MESSAGE_DELETED"
+                                        ? "Message deleted"
+                                        : payload.content ?? m.replyToContent,
+                                };
+                            }
+
+                            return m;
+                        })
+                    );
+                    callbacksRef.current.updateConversationMessagePreview?.(payload.conversationId ?? id, {
+                        messageId: payload.messageId,
+                        content: payload.content,
+                        editedAt: payload.editedAt,
+                        deletedAt: payload.deletedAt,
+                    });
+                    return;
+                }
+
+                // 5) Attachment Linked
                 if (payload?.messageId && payload?.attachments) {
                     const attachmentSentAt = payload.attachments?.[0]?.sentAt;
                     callbacksRef.current.setMessages?.((prev) =>
@@ -183,7 +230,7 @@ export function useChatTopics({
                     return;
                 }
 
-                // 5) New Message Event
+                // 6) New Message Event
                 if (payload?.userId && payload?.conversationId) {
                     const convId = String(payload.conversationId ?? id);
                     const senderUsername = callbacksRef.current.allUsers?.find(

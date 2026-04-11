@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { instrumentedFetch } from "../../api/apiJson";
+import MessageActionMenu from "./MessageActionMenu";
+import ReactionPicker from "./ReactionPicker";
 import "./MessageBubble.css";
-
-const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 // --- Υπο-component για τα Ticks ---
 const MessageStatus = ({ msg, chatWatermarks, currentUserId }) => {
@@ -35,18 +35,29 @@ const MessageStatus = ({ msg, chatWatermarks, currentUserId }) => {
     return <span className="status-icon sent" aria-label="sent">✓</span>;
 };
 
-export default function MessageBubble({ msg, currentUser, currentUserId, chatWatermarks, token, onReply, onOpenPreview }) {
+export default function MessageBubble({ msg, currentUser, currentUserId, chatWatermarks, token, onReply, onEdit, onDelete, onOpenPreview }) {
     const isMe = msg.senderUsername === currentUser;
+    const isDeleted = Boolean(msg.deleted || msg.deletedAt);
     const attachments = Array.isArray(msg.attachments) ? msg.attachments : [];
     const reactions = Array.isArray(msg.reactions) ? msg.reactions : [];
     const messageDomId = msg.id ? `message-${msg.id}` : undefined;
-    const canReact = msg.id && !String(msg.id).startsWith("temp-") && !String(msg.id).startsWith("evt-");
+    const canReact = msg.id && !isDeleted && !String(msg.id).startsWith("temp-") && !String(msg.id).startsWith("evt-");
+    const canEditDelete = canReact && isMe;
+    const lifecycleError = msg.editFailed
+        ? "Edit failed. Your original message was restored."
+        : msg.deleteFailed
+            ? "Delete failed. The message is still visible."
+            : "";
     const [attachmentUrls, setAttachmentUrls] = useState({});
-    const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editText, setEditText] = useState(msg.content || "");
+
+    useEffect(() => {
+        if (!isEditing) setEditText(msg.content || "");
+    }, [isEditing, msg.content]);
 
     const toggleReaction = useCallback(async (emoji) => {
         if (!canReact) return;
-        setIsReactionPickerOpen(false);
 
         try {
             const response = await instrumentedFetch(`/api/messages/${encodeURIComponent(msg.id)}/reactions`, {
@@ -89,6 +100,20 @@ export default function MessageBubble({ msg, currentUser, currentUserId, chatWat
             console.error("Attachment download failed:", error);
         }
     }, [token]);
+
+    const saveEdit = useCallback(async () => {
+        const trimmed = editText.trim();
+        if (!trimmed) return;
+        const ok = await onEdit?.(msg, trimmed);
+        if (ok !== false) {
+            setIsEditing(false);
+        }
+    }, [editText, msg, onEdit]);
+
+    const startEdit = useCallback(() => {
+        setEditText(msg.content || "");
+        setIsEditing(true);
+    }, [msg.content]);
 
     useEffect(() => {
         const previewableAttachments = attachments.filter((att) => (att.contentType?.startsWith("image/") || att.contentType?.startsWith("video/")) && !att.pending);
@@ -157,7 +182,7 @@ export default function MessageBubble({ msg, currentUser, currentUserId, chatWat
                 )}
 
                 {/* Attachments Section */}
-                {attachments.length > 0 && (
+                {!isDeleted && attachments.length > 0 && (
                     <div className="attachments-list">
                         {attachments.map((att, idx) => {
                             const isImage = att.contentType?.startsWith("image/") || att.localUrl;
@@ -213,7 +238,50 @@ export default function MessageBubble({ msg, currentUser, currentUserId, chatWat
 
                 {/* Message Content & Meta */}
                 <div className="message-row">
-                    {msg.content && <span className="message-text">{msg.content}</span>}
+                    {isEditing ? (
+                        <div className="message-edit-form">
+                            <textarea
+                                className="message-edit-input"
+                                value={editText}
+                                maxLength={500}
+                                rows={2}
+                                onChange={(event) => setEditText(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter" && !event.shiftKey) {
+                                        event.preventDefault();
+                                        saveEdit();
+                                    }
+                                    if (event.key === "Escape") {
+                                        setEditText(msg.content || "");
+                                        setIsEditing(false);
+                                    }
+                                }}
+                                autoFocus
+                            />
+                            <div className="message-edit-actions">
+                                <button type="button" onClick={saveEdit} disabled={!editText.trim()}>Save</button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEditText(msg.content || "");
+                                        setIsEditing(false);
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    ) : isDeleted ? (
+                        <span className="message-text deleted">Message deleted</span>
+                    ) : (
+                        msg.content && <span className="message-text">{msg.content}</span>
+                    )}
+
+                    {lifecycleError && (
+                        <div className="message-error" role="status">
+                            {lifecycleError}
+                        </div>
+                    )}
 
                     <div className="message-meta">
                         <span className="message-time">
@@ -221,6 +289,7 @@ export default function MessageBubble({ msg, currentUser, currentUserId, chatWat
                                 ? new Date(msg.createdAt || msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                                 : ''}
                         </span>
+                        {!isDeleted && msg.editedAt && <span className="message-edited">edited</span>}
 
                         {/* Εμφανίζουμε τα Ticks ΜΟΝΟ στα δικά μας μηνύματα */}
                         {isMe && (
@@ -235,16 +304,17 @@ export default function MessageBubble({ msg, currentUser, currentUserId, chatWat
                     </div>
                 </div>
 
-                <button
-                    type="button"
-                    className="message-reply-btn"
-                    onClick={() => onReply?.(msg)}
-                    aria-label="Reply to message"
-                    title="Reply"
-                >
-                    <span aria-hidden="true">↩</span>
-                    <span className="message-reply-text">Reply</span>
-                </button>
+                {!isDeleted && !isEditing && canReact && (
+                    <div className="message-side-actions">
+                        <ReactionPicker onReact={toggleReaction} />
+                        <MessageActionMenu
+                            canEditDelete={canEditDelete}
+                            onReply={() => onReply?.(msg)}
+                            onEdit={startEdit}
+                            onDelete={() => onDelete?.(msg)}
+                        />
+                    </div>
+                )}
 
                 {reactions.length > 0 && (
                     <div className="message-reactions">
@@ -264,33 +334,6 @@ export default function MessageBubble({ msg, currentUser, currentUserId, chatWat
                     </div>
                 )}
 
-                {canReact && (
-                    <div className="reaction-picker-shell">
-                        <button
-                            type="button"
-                            className="reaction-picker-toggle"
-                            onClick={() => setIsReactionPickerOpen((open) => !open)}
-                            aria-label="React to message"
-                            title="React"
-                        >
-                            <span aria-hidden="true">☺</span>
-                        </button>
-                        {isReactionPickerOpen && (
-                            <div className="reaction-picker">
-                                {REACTION_EMOJIS.map((emoji) => (
-                                    <button
-                                        key={emoji}
-                                        type="button"
-                                        className="reaction-picker-option"
-                                        onClick={() => toggleReaction(emoji)}
-                                    >
-                                        {emoji}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
             </div>
         </div>
     );

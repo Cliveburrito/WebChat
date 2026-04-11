@@ -1,11 +1,15 @@
 package com.example.WebChat.message;
 
 import com.example.WebChat.message.dto.ChatMessageEvent;
+import com.example.WebChat.message.dto.ChatMessageResponse;
+import com.example.WebChat.message.dto.MessageLifecycleEvent;
 import com.example.WebChat.message.dto.WatermarkUpdateEvent;
 import com.example.WebChat.config.AppProperties;
+import com.example.WebChat.conversation.ConversationCacheService;
 import com.example.WebChat.conversation.MembershipGuard;
 import com.example.WebChat.config.RabbitMQConfig;
 import com.example.WebChat.conversation.ConversationMembersCacheService;
+import com.example.WebChat.shared.ResourceNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +17,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 
@@ -24,8 +31,10 @@ public class MessageService {
     private final StringRedisTemplate stringRedisTemplate;
     private final MembershipGuard membershipGuard;
     private final ConversationMembersCacheService conversationMembersCacheService;
+    private final ConversationCacheService conversationCacheService;
     private final AppProperties appProperties;
     private final MessageRepository messageRepository;
+    private final MessageCacheService messageCacheService;
     static final String WATERMARK_KEY_PREFIX = "watermarks:";
     static final String DIRTY_WATERMARKS_KEY = "watermarks:dirty";
 
@@ -36,20 +45,84 @@ public class MessageService {
             StringRedisTemplate stringRedisTemplate,
             MembershipGuard membershipGuard,
             ConversationMembersCacheService conversationMembersCacheService,
+            ConversationCacheService conversationCacheService,
             AppProperties appProperties,
-            MessageRepository messageRepository
+            MessageRepository messageRepository,
+            MessageCacheService messageCacheService
     ) {
         this.messagingTemplate = messagingTemplate;
         this.rabbitTemplate = rabbitTemplate;
         this.stringRedisTemplate = stringRedisTemplate;
         this.membershipGuard = membershipGuard;
         this.conversationMembersCacheService = conversationMembersCacheService;
+        this.conversationCacheService = conversationCacheService;
         this.appProperties = appProperties;
         this.messageRepository = messageRepository;
+        this.messageCacheService = messageCacheService;
     }
 
     public boolean canAccessConversation(Long userId, Long conversationId) {
         return membershipGuard.isMember(userId, conversationId);
+    }
+
+    @Transactional
+    public ChatMessageResponse editMessage(Long userId, Long messageId, String content) {
+        String normalizedContent = validateEditedContent(content);
+        Message message = loadMessageForLifecycleChange(messageId);
+        Long conversationId = message.getConversation().getId();
+
+        assertCanChangeMessage(userId, message, "edit");
+        if (message.isDeleted()) {
+            throw new IllegalArgumentException("Deleted messages cannot be edited.");
+        }
+
+        message.setMessage(normalizedContent);
+        message.setEditedAt(Instant.now());
+        Message saved = messageRepository.save(message);
+        ChatMessageResponse response = ChatMessageResponse.fromEntity(saved);
+
+        afterCommitLifecycleUpdate(
+                conversationId,
+                response,
+                new MessageLifecycleEvent(
+                        MessageLifecycleEvent.MESSAGE_EDITED,
+                        saved.getId(),
+                        conversationId,
+                        response.content(),
+                        response.editedAt(),
+                        null
+                )
+        );
+
+        return response;
+    }
+
+    @Transactional
+    public ChatMessageResponse deleteMessage(Long userId, Long messageId) {
+        Message message = loadMessageForLifecycleChange(messageId);
+        Long conversationId = message.getConversation().getId();
+
+        assertCanChangeMessage(userId, message, "delete");
+        if (message.getDeletedAt() == null) {
+            message.setDeletedAt(Instant.now());
+            messageRepository.save(message);
+        }
+
+        ChatMessageResponse response = ChatMessageResponse.fromEntity(message);
+        afterCommitLifecycleUpdate(
+                conversationId,
+                response,
+                new MessageLifecycleEvent(
+                        MessageLifecycleEvent.MESSAGE_DELETED,
+                        message.getId(),
+                        conversationId,
+                        null,
+                        message.getEditedAt(),
+                        response.deletedAt()
+                )
+        );
+
+        return response;
     }
 
     // ----- Public API -----
@@ -80,7 +153,7 @@ public class MessageService {
                 Instant.now(),
                 replyToMessageId,
                 replyTo == null ? null : replyTo.getSender().getUsername(),
-                replyTo == null ? null : replyTo.getMessage()
+                replyTo == null ? null : replyTo.isDeleted() ? "Message deleted" : replyTo.getMessage()
         );
 
         // Realtime broadcast (users see the message instantly)
@@ -170,5 +243,51 @@ public class MessageService {
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    private Message loadMessageForLifecycleChange(Long messageId) {
+        return messageRepository.findByIdWithSenderAndConversation(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
+    }
+
+    private void assertCanChangeMessage(Long userId, Message message, String action) {
+        Long conversationId = message.getConversation().getId();
+        if (!membershipGuard.isMember(userId, conversationId)) {
+            throw new AccessDeniedException("You are not a member of this conversation.");
+        }
+        if (!message.getSender().getId().equals(userId)) {
+            throw new AccessDeniedException("Only the message sender can " + action + " this message.");
+        }
+    }
+
+    private String validateEditedContent(String content) {
+        String normalized = content == null ? "" : content.trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("Edited message content cannot be empty.");
+        }
+        if (normalized.length() > 500) {
+            throw new IllegalArgumentException("Edited message content cannot exceed 500 characters.");
+        }
+        return normalized;
+    }
+
+    private void afterCommitLifecycleUpdate(Long conversationId, ChatMessageResponse response, MessageLifecycleEvent event) {
+        Runnable publish = () -> {
+            messageCacheService.updateMessageInCache(conversationId, response);
+            conversationCacheService.evictUserChats(conversationMembersCacheService.getMemberIds(conversationId));
+            messagingTemplate.convertAndSend("/topic/chat/" + conversationId, event);
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publish.run();
+                }
+            });
+            return;
+        }
+
+        publish.run();
     }
 }

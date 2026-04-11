@@ -1,4 +1,5 @@
 import "./MessageComposer.css";
+import Icon from "../common/Icon";
 
 export default function MessageComposer({
                                             value,
@@ -63,8 +64,9 @@ export default function MessageComposer({
                     className={`send-btn ${disabled ? 'disabled' : ''}`}
                     onClick={onSend}
                     disabled={disabled}
+                    aria-label="Send message"
                 >
-                    ➤
+                    <Icon name="send" size={18} />
                 </button>
             </div>
         </div>

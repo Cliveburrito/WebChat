@@ -6,10 +6,15 @@ import com.example.WebChat.auth.dto.AuthTokens;
 import com.example.WebChat.auth.dto.CustomPrincipal;
 import com.example.WebChat.auth.dto.LoginUserRequest;
 import com.example.WebChat.auth.dto.RegisterUserRequest;
+import com.example.WebChat.attachment.FileSystemStorageService;
+import com.example.WebChat.attachment.dto.StoredFile;
 import com.example.WebChat.presence.PresenceService;
 import com.example.WebChat.observability.TrackingLog;
+import com.example.WebChat.shared.ResourceNotFoundException;
+import com.example.WebChat.shared.UnsupportedFileTypeException;
 import com.example.WebChat.shared.EmailAlreadyExistsException;
 import com.example.WebChat.shared.UserAlreadyExistsException;
+import com.example.WebChat.user.dto.ProfileUpdateRequest;
 import com.example.WebChat.user.dto.UserResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +25,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 
@@ -34,6 +40,7 @@ public class UserService {
         private final PresenceService presenceService;
         private final TrackingLog trackingLog;
         private final RefreshTokenService refreshTokenService;
+        private final FileSystemStorageService storageService;
 
         @CacheEvict(value = "global_users", allEntries = true)
         public AuthTokens register(RegisterUserRequest request) {
@@ -50,6 +57,7 @@ public class UserService {
             user.setEmail(request.email());
             user.setPasswordHash(passwordEncoder.encode(request.password()));
             user.setCreatedAt(Instant.now());
+            user.setLastSeenAt(Instant.now());
             user.setEnabled(true);
             user.setStealthMode(false);
 
@@ -59,7 +67,10 @@ public class UserService {
                     saved.getId(),
                     saved.getUsername(),
                     saved.getEmail(),
-                    saved.getAvatarUrl()
+                    saved.getDisplayName(),
+                    saved.getBio(),
+                    saved.getAvatarUrl(),
+                    saved.getLastSeenAt()
             );
 
             CustomPrincipal principal = new CustomPrincipal(
@@ -96,7 +107,10 @@ public class UserService {
                     user.getId(),
                     user.getUsername(),
                     user.getEmail(),
-                    user.getAvatarUrl()
+                    user.getDisplayName(),
+                    user.getBio(),
+                    user.getAvatarUrl(),
+                    user.getLastSeenAt()
             );
 
             // Generate token using the userDetails we got from the Manager
@@ -135,6 +149,72 @@ public class UserService {
                 presenceService.onConnect(username);
                 log.info("User {} is now Visible", username);
             }
+        }
+
+        @Transactional
+        @CacheEvict(value = "global_users", allEntries = true)
+        public UserResponse updateProfile(Long userId, ProfileUpdateRequest request) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+
+            user.setDisplayName(cleanNullable(request.displayName(), 80));
+            user.setBio(cleanNullable(request.bio(), 280));
+
+            return UserResponse.fromEntity(user);
+        }
+
+        @Transactional
+        @CacheEvict(value = "global_users", allEntries = true)
+        public UserResponse updateAvatar(Long userId, MultipartFile file) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+
+            StoredFile stored = storageService.store(file);
+            if (!stored.contentType().startsWith("image/")) {
+                storageService.deleteIfExists(stored.storageName());
+                if (stored.thumbnailStorageName() != null) {
+                    storageService.deleteIfExists(stored.thumbnailStorageName());
+                }
+                throw new UnsupportedFileTypeException("Profile photo must be an image.");
+            }
+
+            String previousStorageName = avatarStorageName(user.getAvatarUrl());
+            String avatarStorageName = stored.thumbnailStorageName() != null
+                    ? stored.thumbnailStorageName()
+                    : stored.storageName();
+
+            user.setAvatarUrl("/api/users/avatar/" + avatarStorageName);
+            if (previousStorageName != null && !previousStorageName.equals(avatarStorageName)) {
+                storageService.deleteIfExists(previousStorageName);
+            }
+            if (stored.thumbnailStorageName() != null) {
+                storageService.deleteIfExists(stored.storageName());
+            }
+
+            return UserResponse.fromEntity(user);
+        }
+
+        private static String cleanNullable(String value, int maxLength) {
+            if (value == null) {
+                return null;
+            }
+            String trimmed = value.trim();
+            if (trimmed.isBlank()) {
+                return null;
+            }
+            return trimmed.length() > maxLength ? trimmed.substring(0, maxLength) : trimmed;
+        }
+
+        private static String avatarStorageName(String avatarUrl) {
+            if (avatarUrl == null || avatarUrl.isBlank()) {
+                return null;
+            }
+            String marker = "/api/users/avatar/";
+            int index = avatarUrl.lastIndexOf(marker);
+            if (index < 0) {
+                return null;
+            }
+            return avatarUrl.substring(index + marker.length());
         }
     }
 

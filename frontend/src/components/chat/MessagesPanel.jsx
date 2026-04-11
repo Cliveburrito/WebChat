@@ -16,10 +16,22 @@ export default function MessagesPanel({
                                           typingUser,
                                           watermarks,
                                           activeChatId,
+                                          activeChat,
+                                          selfWatermark,
+                                          unreadBoundaryId,
                                           onReply,
+                                          onEdit,
+                                          onDelete,
                                           onOpenPreview
                                       }) {
     const currentChatWatermarks = watermarks?.[activeChatId] || {};
+    const fallbackBoundaryId = Number(selfWatermark?.lastReadId ?? activeChat?.myLastReadMessageId ?? 0);
+    const markerBoundaryId = unreadBoundaryId ?? (
+        Number(activeChat?.unreadCount ?? activeChat?.unread_count ?? 0) > 0 && Number.isFinite(fallbackBoundaryId)
+            ? fallbackBoundaryId
+            : null
+    );
+    const showUnreadMarker = markerBoundaryId !== null;
 
     // --- Logic για αυτόματο Load More στο Scroll ---
     const handleScrollInternal = (e) => {
@@ -56,6 +68,19 @@ export default function MessagesPanel({
                 lastDateString = dateString;
             }
 
+            if (
+                showUnreadMarker
+                && Number(m.id) > markerBoundaryId
+                && m.senderUsername !== currentUser
+                && !elements.some((element) => element.key === "unread-marker")
+            ) {
+                elements.push(
+                    <div key="unread-marker" className="unread-separator">
+                        <span>Unread messages</span>
+                    </div>
+                );
+            }
+
             elements.push(
                 <MessageBubble
                     key={m.id ?? `temp-${i}`}
@@ -65,6 +90,8 @@ export default function MessagesPanel({
                     chatWatermarks={currentChatWatermarks}
                     token={token}
                     onReply={onReply}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
                     onOpenPreview={onOpenPreview}
                 />
             );

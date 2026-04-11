@@ -41,8 +41,13 @@ public interface ConvMembershipRepository extends JpaRepository<ConvMembership, 
             -- Display Name Logic
             CASE
                 WHEN c.is_group = true THEN c.conversation_name
-                ELSE COALESCE(other_u.username, 'Unknown User')
+                ELSE COALESCE(NULLIF(other_u.display_name, ''), other_u.username, 'Unknown User')
             END AS displayName,
+
+            CASE
+                WHEN c.is_group = true THEN NULL
+                ELSE other_u.avatar_url
+            END AS avatarUrl,
         
             -- Last Content: Αν είναι NULL, επιστρέφουμε κενό string
             COALESCE(lm.display_content, '') AS lastContent,
@@ -59,6 +64,7 @@ public interface ConvMembershipRepository extends JpaRepository<ConvMembership, 
         
             me.muted AS muted,
             c.is_group AS isGroup,  -- ✅ NEW: Χρειαζόμαστε το isGroup στο DTO
+            other_u.last_seen_at AS directParticipantLastSeenAt,
             me.last_delivered_message_id AS myLastDeliveredMessageId,
             me.last_read_message_id AS myLastReadMessageId,
         
@@ -108,8 +114,12 @@ public interface ConvMembershipRepository extends JpaRepository<ConvMembership, 
             c.id AS conversation_id,
             CASE
                 WHEN c.is_group = true THEN c.conversation_name
-                ELSE COALESCE(other_u.username, 'Unknown User')
+                ELSE COALESCE(NULLIF(other_u.display_name, ''), other_u.username, 'Unknown User')
             END AS displayName,
+            CASE
+                WHEN c.is_group = true THEN NULL
+                ELSE other_u.avatar_url
+            END AS avatarUrl,
             COALESCE(lm.display_content, '') AS lastContent,
             lm.sent_at AS lastMessageAt,
             (SELECT COUNT(*)
@@ -120,6 +130,7 @@ public interface ConvMembershipRepository extends JpaRepository<ConvMembership, 
             ) AS unreadCount,
             me.muted AS muted,
             c.is_group AS isGroup,
+            other_u.last_seen_at AS directParticipantLastSeenAt,
             me.last_delivered_message_id AS myLastDeliveredMessageId,
             me.last_read_message_id AS myLastReadMessageId,
             lm.msg_id AS lastMessageId,

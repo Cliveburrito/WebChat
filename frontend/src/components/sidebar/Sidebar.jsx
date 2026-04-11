@@ -12,7 +12,9 @@ export default function Sidebar({
                                     token,
                                     onGroupCreated,
                                     onlineUsers = [],
-                                    watermarks     // <--- NEW: Τα ticks από το App.js
+                                    watermarks,     // <--- NEW: Τα ticks από το App.js
+                                    isMobileOpen = false,
+                                    onRequestClose
                                 }) {
     const [isOpen, setIsOpen] = useState(false);
 
@@ -22,18 +24,19 @@ export default function Sidebar({
     }, [users, currentUser]);
 
     return (
-        <aside className="sidebar left">
-            <div style={{ padding: "15px", borderBottom: "1px solid var(--border-color)" }}>
+        <aside className={`sidebar left ${isMobileOpen ? "mobile-open" : ""}`}>
+            <div className="sidebar-mobile-topbar">
+                <strong>Chats</strong>
+                <button type="button" onClick={onRequestClose} aria-label="Close chats">x</button>
+            </div>
+            <div className="sidebar-compose">
                 <button
-                    style={{
-                        width: "100%", padding: "12px", fontWeight: "bold",
-                        borderRadius: "8px", cursor: "pointer",
-                        background: "var(--primary-blue)", color: "white", border: "none"
-                    }}
+                    className="new-chat-btn"
                     onClick={() => setIsOpen(true)}
                     title={`Create group (${contactsCount} contacts)`}
                 >
-                    + New Group Chat
+                    <span>+</span>
+                    <strong>New Group Chat</strong>
                 </button>
             </div>
 

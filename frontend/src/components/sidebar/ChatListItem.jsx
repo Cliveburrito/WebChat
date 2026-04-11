@@ -1,4 +1,6 @@
 import Avatar from "../common/Avatar";
+import Icon from "../common/Icon";
+import { formatLastSeen } from "../../utils/lastSeen";
 import "./ChatListItem.css";
 
 const SidebarStatus = ({ chat, watermarks, currentUserId }) => {
@@ -27,6 +29,9 @@ export default function ChatListItem({ chat, activeChat, onSelectChat, onlineUse
 
     const isDirect = chat.isGroup === false;
     const isOnline = isDirect && onlineUsers.includes(chatTitle);
+    const directPresenceText = isDirect
+        ? (isOnline ? "Online" : formatLastSeen(chat.directParticipantLastSeenAt))
+        : "";
 
     const unreadCount = Number(chat.unreadCount ?? chat.unread_count ?? 0);
 
@@ -37,14 +42,14 @@ export default function ChatListItem({ chat, activeChat, onSelectChat, onlineUse
     return (
         <div className={`chat-item ${isActive ? "active" : ""}`} onClick={() => onSelectChat(chat)}>
             {/* Column 1: Avatar */}
-            <Avatar name={chatTitle} isOnline={isDirect ? isOnline : undefined} />
+            <Avatar name={chatTitle} avatarUrl={chat.avatarUrl} isOnline={isDirect ? isOnline : undefined} />
 
             {/* Column 2: Info (Name & Preview) */}
             <div className="chat-item-info">
                 <div className="chat-item-header">
                     <span className="chat-item-name">{chatTitle}</span>
                     <span className={`chat-item-time ${unreadCount > 0 ? "highlight" : ""}`}>
-                        {timeDisplay}
+                        {directPresenceText || timeDisplay}
                     </span>
                 </div>
 
@@ -58,7 +63,11 @@ export default function ChatListItem({ chat, activeChat, onSelectChat, onlineUse
                     </div>
 
                     <div className="chat-item-badges">
-                        {chat.muted && <span className="mute-icon">🔕</span>}
+                        {chat.muted && (
+                            <span className="mute-icon" title="Muted">
+                                <Icon name="bellOff" size={14} />
+                            </span>
+                        )}
                         {unreadCount > 0 && (
                             <span className="unread-badge">{unreadCount}</span>
                         )}

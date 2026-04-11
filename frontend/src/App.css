@@ -2,30 +2,39 @@
    1. VARIABLES & RESET
    ========================================= */
 :root {
-  --bg-app: #d1d7db;
+  --bg-app: #edf3f0;
   --bg-sidebar: #ffffff;
-  --bg-header: #f0f2f5;
-  --bg-chat-area: #efeae2;
-  --bg-main: #f8fafc;
-  --border-color: #e9edef;
-  --text-main: #111b21;
-  --text-secondary: #667781;
-  --bg-msg-me: #d9fdd3;      /* Ανοιχτό πράσινο (Light) */
+  --bg-header: rgba(255, 255, 255, 0.9);
+  --bg-chat-area: #f4f8f6;
+  --bg-main: #f7fbf9;
+  --surface-soft: #eef7f3;
+  --surface-hover: #f2faf6;
+  --border-color: #dfe9e5;
+  --text-main: #10201b;
+  --text-secondary: #60736c;
+  --bg-msg-me: #c9f7df;
   --bg-msg-other: #ffffff;
   --primary-blue: #00a884;
+  --primary-strong: #02866d;
+  --accent-coral: #ff5c7a;
+  --shadow-soft: 0 14px 36px rgba(11, 45, 35, 0.12);
 }
 
 .dark-theme {
-  --bg-app: #0b141a;
-  --bg-sidebar: #111b21;
-  --bg-header: #202c33;
-  --bg-chat-area: #0b141a;
-  --bg-msg-me: #005c4b;      /* Σκούρο πράσινο (Dark) */
-  --bg-msg-other: #202c33;
-  --bg-main: #111b21;
-  --border-color: #222d34;
-  --text-main: #e9edef;
-  --text-secondary: #8696a0;
+  --bg-app: #101915;
+  --bg-sidebar: #14211c;
+  --bg-header: rgba(20, 33, 28, 0.92);
+  --bg-chat-area: #101915;
+  --bg-msg-me: #08745f;
+  --bg-msg-other: #1b2a24;
+  --bg-main: #111d18;
+  --surface-soft: #1b2a24;
+  --surface-hover: #20322b;
+  --border-color: #294038;
+  --text-main: #eef8f4;
+  --text-secondary: #9ab0a8;
+  --primary-strong: #12c99f;
+  --shadow-soft: 0 16px 42px rgba(0, 0, 0, 0.28);
 }
 
 * { box-sizing: border-box; }
@@ -35,7 +44,7 @@ body, html, #root {
   width: 100vw;
   margin: 0;
   overflow: hidden; /* Κλειδώνει το scroll του browser */
-  font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* =========================================
@@ -45,18 +54,25 @@ body, html, #root {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: var(--bg-app);
+  background:
+    radial-gradient(circle at top left, rgba(0, 168, 132, 0.16), transparent 34%),
+    linear-gradient(135deg, var(--bg-app), var(--bg-main));
+  color: var(--text-main);
 }
 
 .main-header {
-  height: 60px;
+  height: 68px;
   background: var(--bg-header);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid rgba(16, 32, 27, 0.08);
+  backdrop-filter: blur(18px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 22px;
   flex-shrink: 0; /* Δεν μικραίνει ποτέ */
+  box-shadow: 0 8px 28px rgba(11, 45, 35, 0.08);
+  position: relative;
+  z-index: 30;
 }
 
 /* 🚀 ΤΟ ΚΛΕΙΔΙ ΓΙΑ ΤΟ SCROLLING ΣΤΑ SIDEBARS */
@@ -65,21 +81,35 @@ body, html, #root {
   flex: 1;
   overflow: hidden; /* Σημαντικό! */
   min-height: 0;   /* Flexbox fix για Firefox/Chrome */
+  position: relative;
 }
 
 /* Sidebars Base Style */
 .sidebar {
   display: flex;
   flex-direction: column;
-  background: var(--bg-sidebar);
+  background: rgba(255, 255, 255, 0.86);
   height: 100%;    /* Γεμίζει το main-layout */
   overflow: hidden;
   flex-shrink: 0;
-  border-right: 1px solid var(--border-color);
+  border-right: 1px solid rgba(16, 32, 27, 0.08);
+  backdrop-filter: blur(18px);
 }
 
-.sidebar.left { width: 350px; }
-.sidebar.right { width: 280px; border-left: 1px solid var(--border-color); }
+.dark-theme .sidebar {
+  background: rgba(20, 33, 28, 0.88);
+}
+
+.sidebar.left { width: 360px; }
+.sidebar.right {
+  width: 300px;
+  border-left: 1px solid rgba(16, 32, 27, 0.08);
+  border-right: 0;
+}
+
+.sidebar-mobile-topbar {
+  display: none;
+}
 
 /* 🚀 ΕΔΩ ΕΙΝΑΙ ΤΟ SCROLL */
 .sidebar-list, .sidebar-content {
@@ -104,38 +134,324 @@ body, html, #root {
   gap: 10px;
 }
 
+.icon {
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary-blue), #2bd9a8);
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(0, 168, 132, 0.26);
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.brand-copy strong {
+  letter-spacing: 0;
+}
+
 .brand .user-tag {
   color: var(--text-secondary);
   font-weight: 500;
+  font-size: 0.82rem;
+}
+
+.profile-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-link:hover {
+  color: var(--primary-blue);
 }
 
 /* =========================================
    3. UTILITIES
    ========================================= */
 .stealth-ghost {
-  font-size: 1.5rem;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-sidebar);
+  font-size: 1.15rem;
   cursor: pointer;
   filter: grayscale(1);
-  opacity: 0.5;
-  transition: 0.3s;
+  opacity: 0.62;
+  transition: transform 0.18s, opacity 0.18s, background-color 0.18s;
 }
 .stealth-ghost.active {
   filter: drop-shadow(0 0 5px var(--primary-blue));
   opacity: 1;
+  background: rgba(0, 168, 132, 0.12);
+}
+
+.stealth-ghost:hover {
+  transform: translateY(-1px);
+  opacity: 1;
 }
 
 .control-btn, .logout-btn {
-  padding: 6px 14px;
-  border-radius: 15px;
+  padding: 9px 13px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
   cursor: pointer;
   font-size: 0.85rem;
   background: var(--bg-sidebar);
   color: var(--text-main);
+  font-weight: 650;
+  transition: transform 0.18s, box-shadow 0.18s, background-color 0.18s;
 }
 
-.logout-btn { background: #ff4d4d; color: white; border: none; }
+.control-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mobile-nav-btn {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-sidebar);
+  color: var(--text-main);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.18s, box-shadow 0.18s, background-color 0.18s;
+}
+
+.mobile-nav-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(11, 45, 35, 0.12);
+}
+
+.mobile-drawer-backdrop {
+  display: none;
+}
+
+.control-btn:hover,
+.logout-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(11, 45, 35, 0.12);
+}
+
+.logout-btn {
+  background: var(--accent-coral);
+  color: white;
+  border: none;
+}
+
+.sidebar-compose {
+  padding: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.new-chat-btn {
+  width: 100%;
+  min-height: 46px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--primary-blue), #35cfa5);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  box-shadow: 0 12px 28px rgba(0, 168, 132, 0.24);
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+
+.new-chat-btn span {
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.18);
+  font-weight: 800;
+}
+
+.new-chat-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px rgba(0, 168, 132, 0.3);
+}
+
+.sidebar-section {
+  min-height: 0;
+}
+
+.sidebar-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 16px 10px;
+}
+
+.sidebar-title {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sidebar-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 650;
+  background: var(--surface-soft);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
 
 /* Custom Scrollbar για Sidebars */
-.sidebar-list::-webkit-scrollbar { width: 6px; }
-.sidebar-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+.sidebar-list::-webkit-scrollbar,
+.sidebar-content::-webkit-scrollbar { width: 8px; }
+.sidebar-list::-webkit-scrollbar-thumb,
+.sidebar-content::-webkit-scrollbar-thumb {
+  background: rgba(0, 168, 132, 0.22);
+  border-radius: 8px;
+}
+
+@media (max-width: 1120px) {
+  .sidebar.right {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .main-header {
+    padding: 0 14px;
+    height: 62px;
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .brand-copy strong {
+    font-size: 0.95rem;
+  }
+
+  .header-controls {
+    gap: 6px;
+  }
+
+  .control-btn span,
+  .logout-btn {
+    display: none;
+  }
+
+  .control-btn,
+  .stealth-ghost,
+  .mobile-nav-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+
+  .mobile-nav-btn {
+    display: inline-flex;
+  }
+
+  .mobile-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 62px 0 0;
+    z-index: 80;
+    border: 0;
+    background: rgba(16, 32, 27, 0.42);
+    backdrop-filter: blur(2px);
+  }
+
+  .sidebar.left,
+  .sidebar.right {
+    display: flex;
+    position: fixed;
+    top: 62px;
+    bottom: 0;
+    z-index: 90;
+    width: min(88vw, 360px);
+    height: auto;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+    transition: transform 0.22s ease, opacity 0.22s ease;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .sidebar.left {
+    left: 0;
+    transform: translateX(-104%);
+  }
+
+  .sidebar.right {
+    right: 0;
+    transform: translateX(104%);
+  }
+
+  .sidebar.left.mobile-open,
+  .sidebar.right.mobile-open {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar-mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 54px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .sidebar-mobile-topbar button {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface-soft);
+    color: var(--text-main);
+    cursor: pointer;
+  }
+}

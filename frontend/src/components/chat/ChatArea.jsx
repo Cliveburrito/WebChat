@@ -24,7 +24,8 @@ export default function ChatArea({
                                      onMessageSent,
                                      stompClient,
                                      onToggleMute,
-                                     watermarks
+                                     watermarks,
+                                     selfWatermark
                                  }) {
     // --- States ---
     const [text, setText] = useState("");
@@ -33,6 +34,7 @@ export default function ChatArea({
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [highlightedMessageId, setHighlightedMessageId] = useState(null);
     const [replyTarget, setReplyTarget] = useState(null);
+    const [unreadBoundaryId, setUnreadBoundaryId] = useState(null);
     const [previewState, setPreviewState] = useState({ open: false, attachments: [], initialIndex: 0 });
 
     // --- Refs για Scrolling & UI Logic ---
@@ -56,6 +58,9 @@ export default function ChatArea({
         setHighlightedMessageId(null);
         setReplyTarget(null);
         setPreviewState({ open: false, attachments: [], initialIndex: 0 });
+        const unreadCount = Number(activeChat?.unreadCount ?? activeChat?.unread_count ?? 0);
+        const boundaryId = Number(activeChat?.myLastReadMessageId ?? selfWatermark?.lastReadId ?? 0);
+        setUnreadBoundaryId(unreadCount > 0 && Number.isFinite(boundaryId) ? boundaryId : null);
     }, [chatId]);
 
     // --- 🟢 SCROLL LOGIC (The Fix) ---
@@ -83,10 +88,8 @@ export default function ChatArea({
         const isBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
         shouldAutoScrollRef.current = isBottom;
 
-        // 🚀 LOAD MORE TRIGGER
         // Αυξήσαμε το όριο στο 50px για να "πιάνει" πιο εύκολα
         if (el.scrollTop <= 50 && hasMore && !isLoadingMessages && !isPrependingRef.current) {
-            console.log("📜 Reached top. Loading more...");
             handleLoadMore();
         }
     }, [hasMore, isLoadingMessages, handleLoadMore]);
@@ -244,9 +247,84 @@ export default function ChatArea({
     };
 
     const handleReply = useCallback((message) => {
-        if (!message?.id || String(message.id).startsWith("temp-") || String(message.id).startsWith("evt-")) return;
+        if (!message?.id || message.deleted || String(message.id).startsWith("temp-") || String(message.id).startsWith("evt-")) return;
         setReplyTarget(message);
     }, []);
+
+    const handleEditMessage = useCallback(async (message, nextContent) => {
+        if (!message?.id || message.deleted || message.senderUsername !== currentUser) return;
+        const currentContent = message.content || "";
+        const trimmed = String(nextContent ?? "").trim();
+        if (!trimmed || trimmed === currentContent) return;
+
+        const editedAt = new Date().toISOString();
+        setMessages((prev) => prev.map((item) => {
+            if (String(item.id) === String(message.id)) {
+                return { ...item, content: trimmed, editedAt, editFailed: false };
+            }
+            if (String(item.replyToMessageId) === String(message.id)) {
+                return { ...item, replyToContent: trimmed };
+            }
+            return item;
+        }));
+
+        try {
+            const response = await instrumentedFetch(`/api/messages/${encodeURIComponent(message.id)}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ content: trimmed }),
+            });
+            if (!response.ok) throw new Error(`Edit failed for message ${message.id}`);
+
+            const updated = await response.json();
+            setMessages((prev) => prev.map((item) => {
+                if (String(item.id) === String(updated.id)) {
+                    return { ...item, ...updated, reactions: item.reactions || updated.reactions, editFailed: false };
+                }
+                if (String(item.replyToMessageId) === String(updated.id)) {
+                    return { ...item, replyToContent: updated.content || "Message" };
+                }
+                return item;
+            }));
+            return true;
+        } catch (error) {
+            console.error("Message edit failed:", error);
+            setMessages((prev) => prev.map((item) =>
+                String(item.id) === String(message.id) ? { ...item, content: currentContent, editFailed: true } : item
+            ));
+            return false;
+        }
+    }, [currentUser, setMessages, token]);
+
+    const handleDeleteMessage = useCallback(async (message) => {
+        if (!message?.id || message.deleted || message.senderUsername !== currentUser) return;
+
+        const deletedAt = new Date().toISOString();
+        setMessages((prev) => prev.map((item) => {
+            if (String(item.id) === String(message.id)) {
+                return { ...item, content: "", attachments: [], deleted: true, deletedAt, reactions: [], deleteFailed: false };
+            }
+            if (String(item.replyToMessageId) === String(message.id)) {
+                return { ...item, replyToContent: "Message deleted" };
+            }
+            return item;
+        }));
+
+        try {
+            const response = await instrumentedFetch(`/api/messages/${encodeURIComponent(message.id)}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error(`Delete failed for message ${message.id}`);
+            return true;
+        } catch (error) {
+            console.error("Message delete failed:", error);
+            setMessages((prev) => prev.map((item) =>
+                String(item.id) === String(message.id) ? { ...message, deleteFailed: true } : item
+            ));
+            return false;
+        }
+    }, [currentUser, setMessages, token]);
 
     const focusMessage = useCallback((messageId) => {
         const element = document.getElementById(`message-${messageId}`);
@@ -291,7 +369,7 @@ export default function ChatArea({
     if (!activeChat) {
         return (
             <main className="chat-area empty">
-                <div className="empty-state">💬 Select a chat to start</div>
+                <div className="empty-state">Select a chat to start</div>
             </main>
         );
     }
@@ -320,8 +398,13 @@ export default function ChatArea({
                     typingUser={typingUser}
                     watermarks={watermarks}
                     activeChatId={chatId}
+                    selfWatermark={selfWatermark}
+                    unreadBoundaryId={unreadBoundaryId}
+                    activeChat={activeChat}
                     highlightedMessageId={highlightedMessageId}
                     onReply={handleReply}
+                    onEdit={handleEditMessage}
+                    onDelete={handleDeleteMessage}
                     onOpenPreview={(attachments, initialIndex) => setPreviewState({ open: true, attachments, initialIndex })}
                 />
 

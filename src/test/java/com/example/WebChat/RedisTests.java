@@ -50,7 +50,7 @@ class RedisTests {
     void shouldStoreAndTrimTo100Messages() throws Exception {
         for (int i = 1; i <= 120; i++) {
             ChatMessageResponse msg = new ChatMessageResponse(
-                    (long) i, "Message " + i, Instant.now(), "user", 999L, null, null, null, null, null
+                    (long) i, "Message " + i, Instant.now(), "user", 999L, null, null, null, null, null, false, null, null
             );
             String json = objectMapper.writeValueAsString(msg);
 

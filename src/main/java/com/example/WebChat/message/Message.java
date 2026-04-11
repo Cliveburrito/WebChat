@@ -38,6 +38,12 @@ public class Message {
     // When the message was sent; you can set this in code when creating the message
     private Instant sentAt;
 
+    @Column
+    private Instant editedAt;
+
+    @Column
+    private Instant deletedAt;
+
     /**
      * Reference to the USER who sent this message.
      * <p>
@@ -66,4 +72,8 @@ public class Message {
     @OneToMany(mappedBy = "message", cascade = CascadeType.ALL)
     @org.hibernate.annotations.BatchSize(size = 20) // <--- ΠΡΟΣΘΕΣΕ ΑΥΤΟ
     private List<Attachment> attachments;
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
 }

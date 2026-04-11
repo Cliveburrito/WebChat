@@ -5,17 +5,28 @@
 .avatar-circle {
     width: 100%;
     height: 100%;
-    background: var(--primary-blue);
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent),
+        linear-gradient(135deg, var(--primary-blue), #22caa1);
     color: white;
-    border-radius: 50%;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: bold;
     font-size: 1.2rem;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 18px rgba(0, 168, 132, 0.18);
+    overflow: hidden;
+}
+
+.avatar-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
 }
 .avatar-dot {
     position: absolute;
-    bottom: 2px;
-    right: 2px;
+    bottom: -1px;
+    right: -1px;
 }

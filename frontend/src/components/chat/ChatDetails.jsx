@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "../common/Avatar";
+import Icon from "../common/Icon";
 import { apiJson, instrumentedFetch } from "../../api/apiJson";
 import "./ChatDetails.css";
 
@@ -280,7 +281,7 @@ export default function ChatDetails({
             </div>
 
             <div className="details-profile">
-                <Avatar name={chatName} size={72} />
+                <Avatar name={chatName} avatarUrl={activeChat?.avatarUrl} size={72} />
                 <h2>{chatName}</h2>
                 <p>{isGroup ? "Group conversation" : "Direct conversation"}</p>
             </div>
@@ -290,19 +291,19 @@ export default function ChatDetails({
                     className={`details-action ${activeChat?.muted ? "active" : ""}`}
                     onClick={() => onToggleMute?.(conversationId, activeChat?.muted)}
                 >
-                    <span>{activeChat?.muted ? "🔕" : "🔔"}</span>
+                    <Icon name={activeChat?.muted ? "bellOff" : "bell"} size={18} />
                     <span>{activeChat?.muted ? "Notifications off" : "Notifications on"}</span>
                 </button>
                 <button className="details-action" onClick={() => setActiveTab("search")}>
-                    <span>🔎</span>
+                    <Icon name="search" size={18} />
                     <span>Search in chat</span>
                 </button>
                 <button className="details-action" onClick={() => setActiveTab("media")}>
-                    <span>🖼️</span>
+                    <Icon name="media" size={18} />
                     <span>Media & files</span>
                 </button>
                 <button className="details-action" onClick={() => setActiveTab("links")}>
-                    <span>🔗</span>
+                    <Icon name="link" size={18} />
                     <span>Links</span>
                 </button>
             </div>

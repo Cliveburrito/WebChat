@@ -5,6 +5,7 @@ import com.example.WebChat.Service.RateLimiterService;
 import com.example.WebChat.message.dto.ChatMessageRequest;
 import com.example.WebChat.message.dto.ChatMessageResponse;
 import com.example.WebChat.message.dto.MessageAckRequest;
+import com.example.WebChat.message.dto.MessageEditRequest;
 import com.example.WebChat.message.dto.MessageReactionEvent;
 import com.example.WebChat.message.dto.MessageReactionRequest;
 import com.example.WebChat.message.dto.WatermarkUpdateEvent;
@@ -134,5 +135,22 @@ public class ChatController {
         List<MessageReactionEvent> events = messageReactionService.toggleReaction(principal.id(), messageId, request.emoji());
         events.forEach(event -> messagingTemplate.convertAndSend("/topic/chat/" + event.conversationId(), event));
         return ResponseEntity.ok(events);
+    }
+
+    @PatchMapping("/api/messages/{messageId}")
+    public ResponseEntity<ChatMessageResponse> editMessage(
+            @AuthenticationPrincipal CustomPrincipal principal,
+            @PathVariable Long messageId,
+            @RequestBody MessageEditRequest request
+    ) {
+        return ResponseEntity.ok(messageService.editMessage(principal.id(), messageId, request.content()));
+    }
+
+    @DeleteMapping("/api/messages/{messageId}")
+    public ResponseEntity<ChatMessageResponse> deleteMessage(
+            @AuthenticationPrincipal CustomPrincipal principal,
+            @PathVariable Long messageId
+    ) {
+        return ResponseEntity.ok(messageService.deleteMessage(principal.id(), messageId));
     }
 }

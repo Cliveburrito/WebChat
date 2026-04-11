@@ -22,6 +22,7 @@ export function useChatData({ token, currentUser, stompClient }) {
 
     // --- REFS ---
     const activeChatRef = useRef(null);
+    const messagesRef = useRef([]);
     const selfWatermarksRef = useRef({});
     const isFetchingRef = useRef(false);
     const abortControllerRef = useRef(null);
@@ -31,6 +32,7 @@ export function useChatData({ token, currentUser, stompClient }) {
     const ackTimerRef = useRef(null);
 
     useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+    useEffect(() => { messagesRef.current = messages; }, [messages]);
     useEffect(() => { selfWatermarksRef.current = selfWatermarks; }, [selfWatermarks]);
 
     const normalizeId = useCallback((x) => String(x ?? ""), []);
@@ -135,6 +137,7 @@ export function useChatData({ token, currentUser, stompClient }) {
 
     const upsertUser = useCallback((incoming) => {
         if (!incoming?.id || !incoming?.username) return;
+        const previous = allUsers.find((user) => String(user.id) === String(incoming.id));
         setAllUsers((prev) => {
             const exists = prev.some((user) => String(user.id) === String(incoming.id));
             if (exists) {
@@ -142,10 +145,77 @@ export function useChatData({ token, currentUser, stompClient }) {
             }
             return [...prev, incoming].sort((a, b) => String(a.username).localeCompare(String(b.username)));
         });
+        setConversations((prev) => prev.map((chat) => {
+            if (chat.isGroup) return chat;
+            const knownNames = [incoming.username, previous?.displayName, previous?.username].filter(Boolean).map(String);
+            if (!knownNames.includes(String(chat.displayName))) return chat;
+            return {
+                ...chat,
+                displayName: incoming.displayName || incoming.username,
+                avatarUrl: incoming.avatarUrl,
+            };
+        }));
+        setActiveChat((prev) => {
+            if (!prev || prev.isGroup) return prev;
+            const knownNames = [incoming.username, previous?.displayName, previous?.username].filter(Boolean).map(String);
+            if (!knownNames.includes(String(prev.displayName))) return prev;
+            return {
+                ...prev,
+                displayName: incoming.displayName || incoming.username,
+                avatarUrl: incoming.avatarUrl,
+            };
+        });
         if (incoming.username === currentUser) {
             setCurrentUserId(incoming.id);
         }
-    }, [currentUser]);
+    }, [allUsers, currentUser]);
+
+    const updateLocalProfile = useCallback((profile) => {
+        if (!profile?.id) return;
+        upsertUser(profile);
+        setConversations((prev) => prev.map((chat) => {
+            if (chat.isGroup) return chat;
+            if (chat.displayName !== currentUser && String(chat.directParticipantId || "") !== String(profile.id)) return chat;
+            return {
+                ...chat,
+                displayName: profile.displayName || profile.username,
+                avatarUrl: profile.avatarUrl,
+            };
+        }));
+        setActiveChat((prev) => prev && !prev.isGroup && prev.displayName === currentUser
+            ? { ...prev, displayName: profile.displayName || profile.username, avatarUrl: profile.avatarUrl }
+            : prev
+        );
+    }, [currentUser, upsertUser]);
+
+    const updateMyProfile = useCallback(async ({ displayName, bio }) => {
+        const profile = await apiJson("/api/users/me/profile", {
+            token,
+            method: "PATCH",
+            body: { displayName, bio },
+        });
+        updateLocalProfile(profile);
+        return profile;
+    }, [token, updateLocalProfile]);
+
+    const updateMyAvatar = useCallback(async (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await instrumentedFetch("/api/users/me/avatar", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+        });
+        if (!response.ok) {
+            const text = await response.text().catch(() => "");
+            throw new Error(text || "Photo upload failed.");
+        }
+
+        const profile = await response.json();
+        updateLocalProfile(profile);
+        return profile;
+    }, [token, updateLocalProfile]);
 
     // --- CALLBACKS ---
 
@@ -226,6 +296,15 @@ export function useChatData({ token, currentUser, stompClient }) {
     const fetchMessages = useCallback(async (chatId, page = 0) => {
         if (!token || !chatId || isFetchingRef.current) return;
 
+        const isInitialLoad = page === 0;
+        const beforeMessageId = isInitialLoad
+            ? null
+            : messagesRef.current
+                .filter((message) => message?.id && !String(message.id).startsWith("temp-") && !String(message.id).startsWith("evt-"))
+                .reduce((oldest, message) => Math.min(oldest, Number(message.id)), Number.POSITIVE_INFINITY);
+
+        if (!isInitialLoad && !Number.isFinite(beforeMessageId)) return;
+
         if (page === 0) {
             if (abortControllerRef.current) abortControllerRef.current.abort();
             abortControllerRef.current = new AbortController();
@@ -235,16 +314,30 @@ export function useChatData({ token, currentUser, stompClient }) {
         setIsLoadingMessages(true);
 
         try {
+            const params = new URLSearchParams({ size: String(MESSAGE_PAGE_SIZE) });
+            if (isInitialLoad) {
+                params.set("page", "0");
+            } else {
+                params.set("beforeMessageId", String(beforeMessageId));
+            }
+
             const data = await apiJson(
-                `/api/chats/${chatId}/messages?page=${page}&size=${MESSAGE_PAGE_SIZE}`,
+                `/api/chats/${chatId}/messages?${params.toString()}`,
                 { token }
             );
 
             const raw = Array.isArray(data) ? data : data?.content || [];
             const sorted = raw.slice().sort((a, b) => new Date(a.sentAt || a.createdAt) - new Date(b.sentAt || b.createdAt));
 
-            if (page === 0) setMessages(sorted);
-            else setMessages((prev) => [...sorted, ...prev]);
+            if (isInitialLoad) {
+                setMessages(sorted);
+            } else {
+                setMessages((prev) => {
+                    const existingIds = new Set(prev.map((message) => String(message.id)));
+                    const uniqueOlder = sorted.filter((message) => !existingIds.has(String(message.id)));
+                    return [...uniqueOlder, ...prev];
+                });
+            }
 
             setHasMore(raw.length === MESSAGE_PAGE_SIZE);
             setMsgPage(page);
@@ -333,6 +426,25 @@ export function useChatData({ token, currentUser, stompClient }) {
             queueAck(conversationId, messageId, "DELIVERED");
         }
     }, [stompClient, normalizeId, queueAck]);
+
+    const updateConversationMessagePreview = useCallback((conversationId, { messageId, content, deletedAt, editedAt }) => {
+        const key = normalizeId(conversationId);
+        if (!key || !messageId) return;
+
+        const applyPreview = (chat) => {
+            if (normalizeId(chat?.conversationId || chat?.id) !== key) return chat;
+            if (String(chat.lastMessageId ?? "") !== String(messageId)) return chat;
+
+            return {
+                ...chat,
+                lastContent: deletedAt ? "Message deleted" : content,
+                lastMessageAt: editedAt || deletedAt || chat.lastMessageAt,
+            };
+        };
+
+        setConversations((prev) => prev.map(applyPreview));
+        setActiveChat((prev) => prev ? applyPreview(prev) : prev);
+    }, [normalizeId]);
 
     useEffect(() => () => {
         if (ackTimerRef.current) {
@@ -463,7 +575,7 @@ export function useChatData({ token, currentUser, stompClient }) {
     }, [activeChatId, latestIncomingMessageId, markChatRead, activeChat, selfWatermarks, normalizeId]);
 
     return {
-        conversations, allUsers, activeChat, messages, watermarks, msgPage, hasMore, isLoadingMessages, activeChatId, currentUserId,
-        setActiveChat, setMessages, fetchMessages, markChatRead, bumpConversation, queueAck, toggleMute, openDirectChat, onGroupCreated, onWatermarkUpdate, fetchChats, fetchUsers, upsertConversation, upsertUser
+        conversations, allUsers, activeChat, messages, watermarks, selfWatermarks, msgPage, hasMore, isLoadingMessages, activeChatId, currentUserId,
+        setActiveChat, setMessages, fetchMessages, markChatRead, bumpConversation, updateConversationMessagePreview, updateMyProfile, updateMyAvatar, queueAck, toggleMute, openDirectChat, onGroupCreated, onWatermarkUpdate, fetchChats, fetchUsers, upsertConversation, upsertUser
     };
 }

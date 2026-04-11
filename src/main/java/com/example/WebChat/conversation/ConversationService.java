@@ -68,12 +68,14 @@ public class ConversationService {
         User user2 = userRepository.findById(user2Id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + user2Id));
 
-        String displayName = user2.getUsername();
+        String displayName = user2.getDisplayName() == null || user2.getDisplayName().isBlank()
+                ? user2.getUsername()
+                : user2.getDisplayName();
 
         return new ConversationResponse(
                 conversationId,
                 displayName,
-                "default-avatar.png",
+                user2.getAvatarUrl(),
                 "",
                 0L,
                 null,
@@ -81,6 +83,7 @@ public class ConversationService {
                 null,
                 false,
                 false,
+                user2.getLastSeenAt(),
                 0L,
                 0L,
                 List.of()
@@ -127,6 +130,7 @@ public class ConversationService {
                 null,
                 true,
                 false,
+                null,
                 0L,
                 0L,
                 List.of()
@@ -218,7 +222,7 @@ public class ConversationService {
         return new ConversationResponse(
                 r.getConversationId(),
                 r.getDisplayName(),
-                "default-avatar.png",
+                r.getAvatarUrl(),
                 content,
                 unread,
                 lastAt,
@@ -226,6 +230,7 @@ public class ConversationService {
                 senderId,
                 r.getIsGroup(),
                 r.getMuted(),
+                r.getDirectParticipantLastSeenAt(),
                 myDelivered,
                 myRead,
                 participantWatermarks

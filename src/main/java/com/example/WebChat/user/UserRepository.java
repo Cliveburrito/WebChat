@@ -20,6 +20,8 @@ public interface UserRepository extends JpaRepository<User,Long> {
 
     boolean existsByEmail(String email);
 
+    boolean existsByAvatarUrl(String avatarUrl);
+
     @NonNull
     @Override
     List<User> findAllById( Iterable<Long> ids);
@@ -28,5 +30,10 @@ public interface UserRepository extends JpaRepository<User,Long> {
     @Transactional
     @Query("UPDATE User u SET u.stealthMode = :enabled WHERE u.id = :userId")
     void updateStealthMode(@Param("userId") Long userId, @Param("enabled") boolean enabled);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE User u SET u.lastSeenAt = CURRENT_TIMESTAMP WHERE u.username = :username")
+    void touchLastSeenAt(@Param("username") String username);
 
 }

@@ -22,27 +22,35 @@ public record ChatMessageResponse(
         Long replyToMessageId,
         String replyToSenderUsername,
         String replyToContent,
+        Instant editedAt,
+        Instant deletedAt,
+        boolean deleted,
         List<MessageReactionSummary> reactions,
         List<AttachmentDTO> attachments
 ) {
 
     public static ChatMessageResponse fromEntity(Message message) {
+        boolean deleted = message.isDeleted();
         // Force the list to be a standard ArrayList
-        List<AttachmentDTO> attachmentList = (message.getAttachments() == null)
+        List<AttachmentDTO> attachmentList = (deleted || message.getAttachments() == null)
                 ? new ArrayList<>()
                 : message.getAttachments().stream()
                 .map(AttachmentDTO::fromEntity)
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        Message replyToMessage = message.getReplyToMessage();
 
         return new ChatMessageResponse(
                 message.getId(),
-                message.getMessage() != null ? message.getMessage() : "",
+                deleted || message.getMessage() == null ? "" : message.getMessage(),
                 message.getSentAt(),
                 message.getSender().getUsername(),
                 message.getConversation().getId(),
-                message.getReplyToMessage() == null ? null : message.getReplyToMessage().getId(),
-                message.getReplyToMessage() == null ? null : message.getReplyToMessage().getSender().getUsername(),
-                message.getReplyToMessage() == null ? null : message.getReplyToMessage().getMessage(),
+                replyToMessage == null ? null : replyToMessage.getId(),
+                replyToMessage == null ? null : replyToMessage.getSender().getUsername(),
+                replyToMessage == null ? null : replyToMessage.isDeleted() ? "Message deleted" : replyToMessage.getMessage(),
+                message.getEditedAt(),
+                message.getDeletedAt(),
+                deleted,
                 List.of(),
                 attachmentList
         );

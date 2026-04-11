@@ -22,7 +22,7 @@ import java.util.Set;
 @Slf4j
 @RequiredArgsConstructor
 public class MessageCacheService {
-    private static final String CACHE_VERSION = "v3";
+    private static final String CACHE_VERSION = "v4";
 
     private final StringRedisTemplate stringRedisTemplate;
     @Qualifier("furyRedisTemplate")

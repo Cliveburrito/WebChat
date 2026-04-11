@@ -13,7 +13,7 @@
     width: min(1080px, 100%);
     height: min(84vh, 860px);
     background: rgba(12, 18, 23, 0.96);
-    border-radius: 28px;
+    border-radius: 8px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -24,7 +24,7 @@
 .preview-nav {
     position: absolute;
     border: none;
-    border-radius: 999px;
+    border-radius: 8px;
     background: rgba(255, 255, 255, 0.12);
     color: white;
     cursor: pointer;
@@ -72,7 +72,7 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    border-radius: 18px;
+    border-radius: 8px;
 }
 
 .preview-state {

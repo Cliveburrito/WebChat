@@ -3,6 +3,7 @@
     width: 100%;
     margin-bottom: 22px;
     padding: 0 72px 0 48px;
+    animation: message-rise 0.2s ease both;
 }
 
 .message-wrapper.message-highlight .message-bubble {
@@ -20,25 +21,25 @@
 .message-bubble {
     max-width: min(72%, 640px);
     padding: 8px 12px;
-    border-radius: 15px;
+    border-radius: 8px;
     position: relative;
     word-break: break-word;
     overflow-wrap: anywhere;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 20px rgba(11, 45, 35, 0.08);
     color: var(--text-main);
     transition: background-color 0.3s, color 0.3s;
 }
 
 .message-wrapper.me .message-bubble {
     background-color: var(--bg-msg-me) !important;
-    border-top-right-radius: 6px;
+    border-top-right-radius: 4px;
 }
 
 .message-wrapper.other .message-bubble {
     background-color: var(--bg-msg-other) !important;
-    border-top-left-radius: 6px;
+    border-top-left-radius: 4px;
 
 }
 
@@ -52,6 +53,22 @@
 .message-text {
     /* Ensure the text inherits the color we set in the bubble */
     color: inherit;
+}
+
+.message-text.deleted {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.message-error {
+    margin-top: 6px;
+    border: 1px solid rgba(217, 45, 32, 0.28);
+    border-radius: 8px;
+    background: rgba(217, 45, 32, 0.08);
+    color: #b42318;
+    padding: 6px 8px;
+    font-size: 0.78rem;
+    font-weight: 650;
 }
 
 .reply-reference {
@@ -80,38 +97,101 @@
     white-space: nowrap;
 }
 
-.message-reply-btn {
+.message-side-actions {
     position: absolute;
-    right: -64px;
-    top: 50%;
-    transform: translateY(-50%);
-    padding: 2px 6px;
-    border: 0;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 0.8rem;
-    line-height: 1;
-    border-radius: 8px;
-    display: inline-flex;
+    right: -78px;
+    top: 2px;
+    display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     opacity: 0;
-    transition: opacity 0.15s, background-color 0.15s;
+    transition: opacity 0.15s;
+    z-index: 12;
 }
 
-.message-bubble:hover .message-reply-btn,
-.message-reply-btn:focus {
+.message-wrapper.me .message-side-actions {
+    left: -78px;
+    right: auto;
+    flex-direction: row-reverse;
+}
+
+.message-bubble:hover .message-side-actions,
+.message-side-actions:focus-within {
     opacity: 1;
 }
 
-.message-reply-btn:hover,
-.message-reply-btn:focus {
+.message-action-menu-shell,
+.reaction-picker-shell {
+    position: relative;
+}
+
+.message-side-action {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-sidebar);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font: inherit;
+    line-height: 1;
+    box-shadow: 0 8px 18px rgba(11, 45, 35, 0.08);
+    transition: transform 0.15s, background-color 0.15s, box-shadow 0.15s;
+}
+
+.message-side-action:hover,
+.message-side-action:focus {
+    background: var(--bg-main);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(11, 45, 35, 0.12);
+}
+
+.message-action-menu {
+    position: absolute;
+    top: 34px;
+    right: 0;
+    min-width: 132px;
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-sidebar);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    z-index: 15;
+}
+
+.message-wrapper.me .message-action-menu {
+    right: 0;
+    left: auto;
+}
+
+.message-action-menu button,
+.message-confirm-actions button {
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-main);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 7px 9px;
+    text-align: left;
+}
+
+.message-action-menu button:hover,
+.message-action-menu button:focus,
+.message-confirm-actions button:hover,
+.message-confirm-actions button:focus {
     background: rgba(0, 0, 0, 0.08);
 }
 
-.message-reply-text {
-    font-size: 0.72rem;
+.message-action-menu button.danger,
+.message-confirm-actions button.danger {
+    color: #d92d20;
 }
 
 .message-reactions {
@@ -144,46 +224,9 @@
     color: var(--primary-blue);
 }
 
-.reaction-picker-shell {
-    position: absolute;
-    left: -36px;
-    bottom: -2px;
-}
-
-.message-wrapper.me .reaction-picker-shell {
-    left: -36px;
-}
-
-.message-wrapper.other .reaction-picker-shell {
-    left: -36px;
-}
-
-.reaction-picker-toggle {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-sidebar);
-    color: var(--text-secondary);
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.15s, background-color 0.15s;
-}
-
-.message-bubble:hover .reaction-picker-toggle,
-.reaction-picker-toggle:focus,
-.reaction-picker-shell:focus-within .reaction-picker-toggle {
-    opacity: 1;
-}
-
-.reaction-picker-toggle:hover,
-.reaction-picker-toggle:focus {
-    background: var(--bg-main);
-}
-
 .reaction-picker {
     position: absolute;
-    bottom: 34px;
+    top: 40px;
     display: flex;
     gap: 4px;
     padding: 6px;
@@ -200,6 +243,31 @@
 
 .message-wrapper.other .reaction-picker {
     left: 0;
+}
+
+@media (max-width: 720px) {
+    .message-wrapper {
+        padding: 0 48px 0 40px;
+    }
+
+    .message-side-actions {
+        right: -38px;
+        flex-direction: column;
+    }
+
+    .message-wrapper.me .message-side-actions {
+        left: -38px;
+        flex-direction: column;
+    }
+
+    .message-side-action {
+        width: 32px;
+        height: 32px;
+    }
+
+    .message-bubble {
+        max-width: min(82%, 520px);
+    }
 }
 
 .reaction-picker-option {
@@ -238,7 +306,7 @@
 
 .attachment-img {
     max-width: min(100%, 360px);
-    border-radius: 10px;
+    border-radius: 8px;
     display: block;
 }
 
@@ -268,7 +336,7 @@
     text-overflow: ellipsis;
     background: rgba(0, 0, 0, 0.05);
     padding: 5px 10px;
-    border-radius: 10px;
+    border-radius: 8px;
     text-decoration: none;
     color: var(--primary-blue);
     font-size: 0.85rem;
@@ -289,6 +357,79 @@
     gap: 2px;
 }
 
+.message-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: min(280px, 62vw);
+}
+
+.message-edit-input {
+    width: 100%;
+    resize: vertical;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 7px 8px;
+    font: inherit;
+    color: var(--text-main);
+    background: var(--bg-main);
+}
+
+.message-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.message-edit-actions button {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 4px 8px;
+    background: var(--bg-sidebar);
+    color: var(--text-main);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+}
+
+.message-edit-actions button:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.message-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.34);
+    padding: 16px;
+}
+
+.message-confirm {
+    width: min(340px, 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-sidebar);
+    color: var(--text-main);
+    padding: 16px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+}
+
+.message-confirm p {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.message-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
 .message-meta {
     display: flex;
     align-items: center;
@@ -298,6 +439,10 @@
     align-self: flex-end;
     margin-top: 2px;
     color: var(--text-secondary);
+}
+
+.message-edited {
+    font-size: 0.68rem;
 }
 
 .status-icon {
@@ -321,4 +466,15 @@
 
 .status-icon.pending {
     color: #8696a0;
+}
+
+@keyframes message-rise {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }

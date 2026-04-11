@@ -63,6 +63,7 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/actuator/prometheus",
                                 "/api/auth/**",
+                                "/api/users/avatar/**",
                                 "/ws/**"
                         ).permitAll()
                         // All other routes require authentication

@@ -119,6 +119,22 @@ public class FileSystemStorageService implements StorageService {
         }
     }
 
+    public void deleteIfExists(String storageName) {
+        if (storageName == null || storageName.isBlank()) {
+            return;
+        }
+
+        try {
+            Path target = this.rootLocation.resolve(Paths.get(storageName)).normalize().toAbsolutePath();
+            if (!target.getParent().equals(this.rootLocation.toAbsolutePath())) {
+                throw new RuntimeException("Security Breach: Cannot delete file outside of the root directory.");
+            }
+            Files.deleteIfExists(target);
+        } catch (IOException e) {
+            log.warn("Failed to delete stored file {}", storageName, e);
+        }
+    }
+
     @Override
     public Path load(String filename) {
         // Used by the controller to locate the file for downloading/streaming

@@ -17,6 +17,7 @@ public record ConversationResponse(
         Long lastSenderId,
         Boolean isGroup,
         Boolean muted,
+        Instant directParticipantLastSeenAt,
         Long myLastDeliveredMessageId,
         Long myLastReadMessageId,
         java.util.List<ConversationWatermarkResponse> participantWatermarks

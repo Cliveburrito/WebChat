@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 import Sidebar from "./components/sidebar/Sidebar";
 import ChatArea from "./components/chat/ChatArea";
 import RightSidebar from "./components/sidebar/RightSidebar";
+import Icon from "./components/common/Icon";
+import ProfileSettingsModal from "./components/profile/ProfileSettingsModal";
 
 import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
@@ -18,6 +20,9 @@ function App() {
     const { token, currentUser, authView, setAuthView, isAuthed, loginSuccess, logout } = useAuth();
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
     const [stealthMode, setStealthMode] = useState(false);
+    const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
+    const [isDirectoryDrawerOpen, setIsDirectoryDrawerOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
 
     // 1. WebSocket Connection
     const { stompClient, onlineUsers } = useChatSocket({
@@ -32,12 +37,16 @@ function App() {
         activeChat,
         messages,
         watermarks,
+        selfWatermarks,
         msgPage,
         hasMore,
         setActiveChat,
         setMessages,
         fetchMessages,
         bumpConversation,
+        updateConversationMessagePreview,
+        updateMyProfile,
+        updateMyAvatar,
         queueAck,
         openDirectChat,
         onGroupCreated,
@@ -60,12 +69,15 @@ function App() {
         currentUserId,
         setMessages,
         bumpConversation,
+        updateConversationMessagePreview,
         queueAck,
         markChatRead,
         upsertConversation,
         upsertUser,
         onWatermarkUpdate,
     });
+
+    const currentUserProfile = allUsers.find((user) => user.username === currentUser);
 
     const toggleTheme = useCallback(() => {
         const newTheme = theme === "light" ? "dark" : "light";
@@ -84,6 +96,16 @@ function App() {
         } catch (err) { console.error("Stealth update failed:", err); }
     }, [stealthMode, token]);
 
+    const closeMobileDrawers = useCallback(() => {
+        setIsChatDrawerOpen(false);
+        setIsDirectoryDrawerOpen(false);
+    }, []);
+
+    const selectChat = useCallback((chat) => {
+        setActiveChat(chat);
+        closeMobileDrawers();
+    }, [setActiveChat, closeMobileDrawers]);
+
     if (!isAuthed) {
         return authView === "login" ? (
             <Login onLoginSuccess={loginSuccess} onGoToRegister={() => setAuthView("register")} />
@@ -97,21 +119,47 @@ function App() {
             {/* GLOBAL HEADER */}
             <header className="main-header">
                 <div className="brand">
-                    <strong>WebChat</strong> <span className="user-tag">| {currentUser}</span>
+                    <button
+                        type="button"
+                        className="mobile-nav-btn"
+                        onClick={() => setIsChatDrawerOpen(true)}
+                        aria-label="Open chats"
+                    >
+                        <Icon name="menu" size={19} />
+                    </button>
+                    <span className="brand-mark">W</span>
+                    <div className="brand-copy">
+                        <strong>WebChat</strong>
+                        <button type="button" className="user-tag profile-link" onClick={() => setIsProfileOpen(true)}>
+                            {currentUserProfile?.displayName || currentUser}
+                        </button>
+                    </div>
                 </div>
 
                 <div className="header-controls">
                     <button className="control-btn" onClick={toggleTheme}>
-                        {theme === "light" ? "🌙 Dark" : "☀️ Light"}
+                        <Icon name={theme === "light" ? "moon" : "sun"} size={17} />
+                        <span>{theme === "light" ? "Dark" : "Light"}</span>
                     </button>
 
-                    <span
+                    <button
+                        type="button"
                         className={`stealth-ghost ${stealthMode ? "active" : ""}`}
                         onClick={toggleStealthMode}
                         title={stealthMode ? "Invisible Mode" : "Visible"}
+                        aria-label={stealthMode ? "Disable invisible mode" : "Enable invisible mode"}
                     >
-                        👻
-                    </span>
+                        <Icon name="eyeOff" size={18} />
+                    </button>
+
+                    <button
+                        type="button"
+                        className="mobile-nav-btn"
+                        onClick={() => setIsDirectoryDrawerOpen(true)}
+                        aria-label="Open directory"
+                    >
+                        <Icon name="users" size={19} />
+                    </button>
 
                     <button className="logout-btn" onClick={logout}>Logout</button>
                 </div>
@@ -119,17 +167,28 @@ function App() {
 
             {/* MAIN CONTENT AREA */}
             <div className="main-layout">
+                {(isChatDrawerOpen || isDirectoryDrawerOpen) && (
+                    <button
+                        type="button"
+                        className="mobile-drawer-backdrop"
+                        onClick={closeMobileDrawers}
+                        aria-label="Close sidebars"
+                    />
+                )}
+
                 <Sidebar
                     conversations={conversations}
                     users={allUsers}
                     activeChat={activeChat}
-                    onSelectChat={setActiveChat}
+                    onSelectChat={selectChat}
                     onGroupCreated={onGroupCreated}
                     currentUser={currentUser}
                     currentUserId={currentUserId}
                     token={token}
                     onlineUsers={onlineUsers}
                     watermarks={watermarks}
+                    isMobileOpen={isChatDrawerOpen}
+                    onRequestClose={() => setIsChatDrawerOpen(false)}
                 />
 
                 <ChatArea
@@ -143,6 +202,7 @@ function App() {
                     setMessages={setMessages}
                     stompClient={stompClient}
                     watermarks={watermarks}
+                    selfWatermark={selfWatermarks?.[String(activeChatId)]}
                     onMessageSent={(msg) =>
                         bumpConversation(msg.conversationId, {
                             content: msg.content,
@@ -156,10 +216,23 @@ function App() {
                 <RightSidebar
                     users={allUsers}
                     currentUser={currentUser}
-                    onOpenDirectChat={openDirectChat}
+                    onOpenDirectChat={(userId) => {
+                        openDirectChat(userId);
+                        closeMobileDrawers();
+                    }}
                     onlineUsers={onlineUsers}
+                    isMobileOpen={isDirectoryDrawerOpen}
+                    onRequestClose={() => setIsDirectoryDrawerOpen(false)}
                 />
             </div>
+
+            <ProfileSettingsModal
+                open={isProfileOpen}
+                profile={currentUserProfile || { username: currentUser }}
+                onClose={() => setIsProfileOpen(false)}
+                onSaveProfile={updateMyProfile}
+                onUploadAvatar={updateMyAvatar}
+            />
         </div>
     );
 }

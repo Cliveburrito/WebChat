@@ -92,10 +92,13 @@ public class ConversationController {
             @PathVariable Long conversationId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) Long beforeMessageId,
             @AuthenticationPrincipal CustomPrincipal principal) {
 
         // The service handles the SecurityContext internally, so we don't need Principal here
-        List<ChatMessageResponse> history = messageQueryService.getChatHistory(conversationId, page, size, principal.id());
+        List<ChatMessageResponse> history = beforeMessageId == null
+                ? messageQueryService.getChatHistory(conversationId, page, size, principal.id())
+                : messageQueryService.getChatHistoryBefore(conversationId, beforeMessageId, size, principal.id());
         log.info("User {} requests chat history for conversation with id: {}", principal.username() , conversationId);
         return ResponseEntity.ok(history);
     }

@@ -91,6 +91,29 @@ public class MessageQueryService {
         return enrichReactions(responses, userId);
     }
 
+    @Transactional
+    public List<ChatMessageResponse> getChatHistoryBefore(Long conversationId, Long beforeMessageId, int size, Long userId) {
+        if (!membershipGuard.isMember(userId, conversationId)) {
+            throw new AccessDeniedException("Not a member.");
+        }
+        if (beforeMessageId == null || beforeMessageId <= 0) {
+            return getChatHistory(conversationId, 0, size, userId);
+        }
+
+        log.info("Postgres read beforeMessageId={} conv={}", beforeMessageId, conversationId);
+
+        Pageable pageable = PageRequest.of(0, size, Sort.by("id").descending());
+        List<Long> ids = messageRepository.findMessageIdsBefore(conversationId, beforeMessageId, pageable).getContent();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+
+        List<ChatMessageResponse> responses = messageRepository.findMessagesWithDetails(ids).stream()
+                .map(ChatMessageResponse::fromEntity)
+                .toList();
+        return enrichReactions(responses, userId);
+    }
+
     public List<ChatMessageResponse> searchInChat(Long userId, Long conversationId, String query) {
         if (!membershipGuard.isMember(userId, conversationId)) {
             throw new AccessDeniedException("You are not a member of this conversation!");
@@ -153,6 +176,9 @@ public class MessageQueryService {
                         message.replyToMessageId(),
                         message.replyToSenderUsername(),
                         message.replyToContent(),
+                        message.editedAt(),
+                        message.deletedAt(),
+                        message.deleted(),
                         summariesByMessageId.getOrDefault(message.id(), List.of()),
                         message.attachments()
                 ))

@@ -5,6 +5,7 @@ import java.time.Instant;
 public interface ChatListRow {
     Long getConversationId();
     String getDisplayName();
+    String getAvatarUrl();
     String getLastContent();
     Instant getLastMessageAt();
     Long getLastMessageId();
@@ -12,6 +13,7 @@ public interface ChatListRow {
     Long getUnreadCount();
     Boolean getIsGroup();
     Boolean getMuted();
+    Instant getDirectParticipantLastSeenAt();
     Long getMyLastDeliveredMessageId();
     Long getMyLastReadMessageId();
 

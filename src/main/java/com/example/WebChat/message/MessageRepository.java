@@ -40,6 +40,14 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     Slice<Long> findMessageIds(@Param("convId") Long convId, Pageable pageable);
 
     @Query("""
+      SELECT m.id FROM Message m
+      WHERE m.conversation.id = :convId
+      AND m.id < :beforeMessageId
+      ORDER BY m.id DESC
+    """)
+    Slice<Long> findMessageIdsBefore(@Param("convId") Long convId, @Param("beforeMessageId") Long beforeMessageId, Pageable pageable);
+
+    @Query("""
       SELECT m FROM Message m
       JOIN FETCH m.sender
       JOIN FETCH m.conversation
@@ -60,6 +68,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Query(value = """
     SELECT m.id FROM messages m
     WHERE m.conversation_id = :convId
+    AND m.deleted_at IS NULL
     AND to_tsvector('simple', coalesce(m.message, '')) @@ websearch_to_tsquery('simple', :query)
     ORDER BY ts_rank_cd(
         to_tsvector('simple', coalesce(m.message, '')),

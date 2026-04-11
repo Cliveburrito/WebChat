@@ -9,7 +9,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
@@ -68,8 +67,20 @@ class MessageQueryServiceTest {
     @Mock
     private MessageReactionRepository messageReactionRepository;
 
-    @InjectMocks
     private MessageQueryService messageQueryService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        messageQueryService = new MessageQueryService(
+                messageRepository,
+                membershipGuard,
+                messageCacheService,
+                stringRedisTemplate,
+                furyRedisTemplate,
+                fury,
+                messageReactionRepository
+        );
+    }
 
     @Test
     @DisplayName("getChatHistory returns cached messages for the hot window")
@@ -82,8 +93,8 @@ class MessageQueryServiceTest {
         doReturn(furyHashOperations).when(furyRedisTemplate).opsForHash();
         when(furyHashOperations.multiGet(eq("chat:data:6"), anyList())).thenReturn(List.of("a".getBytes(), "b".getBytes()));
 
-        ChatMessageResponse first = new ChatMessageResponse(11L, "one", Instant.now(), "alice", CONVERSATION_ID, null, null, null, List.of(), List.of());
-        ChatMessageResponse second = new ChatMessageResponse(12L, "two", Instant.now(), "bob", CONVERSATION_ID, null, null, null, List.of(), List.of());
+        ChatMessageResponse first = new ChatMessageResponse(11L, "one", Instant.now(), "alice", CONVERSATION_ID, null, null, null, null, null, false, List.of(), List.of());
+        ChatMessageResponse second = new ChatMessageResponse(12L, "two", Instant.now(), "bob", CONVERSATION_ID, null, null, null, null, null, false, List.of(), List.of());
         when(fury.deserialize("a".getBytes())).thenReturn(first);
         when(fury.deserialize("b".getBytes())).thenReturn(second);
         when(messageReactionRepository.summarizeForMessages(List.of(11L, 12L), USER_ID)).thenReturn(List.of());
@@ -144,6 +155,30 @@ class MessageQueryServiceTest {
         List<ChatMessageResponse> results = messageQueryService.searchInChat(USER_ID, CONVERSATION_ID, "hello");
 
         assertThat(results).extracting(ChatMessageResponse::id).containsExactly(20L, 10L);
+    }
+
+    @Test
+    @DisplayName("getChatHistoryBefore returns messages older than the cursor")
+    void getChatHistoryBefore_returnsOlderMessages() {
+        when(membershipGuard.isMember(USER_ID, CONVERSATION_ID)).thenReturn(true);
+
+        @SuppressWarnings("unchecked")
+        Slice<Long> ids = org.mockito.Mockito.mock(Slice.class);
+        when(ids.getContent()).thenReturn(List.of(9L, 8L));
+        when(messageRepository.findMessageIdsBefore(
+                CONVERSATION_ID,
+                10L,
+                PageRequest.of(0, 2, Sort.by("id").descending())
+        )).thenReturn(ids);
+
+        Message firstMessage = message(9L, "older", "alice");
+        Message secondMessage = message(8L, "oldest", "bob");
+        when(messageRepository.findMessagesWithDetails(List.of(9L, 8L))).thenReturn(List.of(firstMessage, secondMessage));
+        when(messageReactionRepository.summarizeForMessages(List.of(9L, 8L), USER_ID)).thenReturn(List.of());
+
+        List<ChatMessageResponse> results = messageQueryService.getChatHistoryBefore(CONVERSATION_ID, 10L, 2, USER_ID);
+
+        assertThat(results).extracting(ChatMessageResponse::id).containsExactly(9L, 8L);
     }
 
     @Test
