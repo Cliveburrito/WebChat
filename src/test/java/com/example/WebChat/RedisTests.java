@@ -1,6 +1,6 @@
 package com.example.WebChat;
 
-import com.example.WebChat.DTO.ChatMessageResponse;
+import com.example.WebChat.message.dto.ChatMessageResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +50,7 @@ class RedisTests {
     void shouldStoreAndTrimTo100Messages() throws Exception {
         for (int i = 1; i <= 120; i++) {
             ChatMessageResponse msg = new ChatMessageResponse(
-                    (long) i, "Message " + i, Instant.now(), "user", 999L, null
+                    (long) i, "Message " + i, Instant.now(), "user", 999L, null, null, null, null, null
             );
             String json = objectMapper.writeValueAsString(msg);
 

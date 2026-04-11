@@ -2,7 +2,9 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react
 import ChatHeader from "./ChatHeader";
 import MessagesPanel from "./MessagesPanel";
 import MessageComposer from "./MessageComposer";
-import { apiForm } from "../../api/apiJson";
+import ConversationDetails from "./ChatDetails";
+import AttachmentPreviewModal from "./AttachmentPreviewModal";
+import { apiForm, instrumentedFetch } from "../../api/apiJson";
 import "./ChatArea.css";
 
 const STOP_TYPING = "__STOP__";
@@ -16,6 +18,7 @@ export default function ChatArea({
                                      hasMore,
                                      isLoadingMessages,
                                      currentUser,
+                                     currentUserId,
                                      token,
                                      setMessages,
                                      onMessageSent,
@@ -27,6 +30,10 @@ export default function ChatArea({
     const [text, setText] = useState("");
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [typingUser, setTypingUser] = useState(null);
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+    const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+    const [replyTarget, setReplyTarget] = useState(null);
+    const [previewState, setPreviewState] = useState({ open: false, attachments: [], initialIndex: 0 });
 
     // --- Refs για Scrolling & UI Logic ---
     const scrollRef = useRef(null);
@@ -38,10 +45,18 @@ export default function ChatArea({
     const pendingUploadsRef = useRef(new Map());
     const typingCooldownRef = useRef(null);
     const remoteTypingTimerRef = useRef(null);
+    const highlightTimeoutRef = useRef(null);
 
     // --- Derived Values ---
     const chatId = activeChat?.conversationId || activeChat?.id;
     const isConnected = !!stompClient?.connected;
+
+    useEffect(() => {
+        setIsDetailsOpen(false);
+        setHighlightedMessageId(null);
+        setReplyTarget(null);
+        setPreviewState({ open: false, attachments: [], initialIndex: 0 });
+    }, [chatId]);
 
     // --- 🟢 SCROLL LOGIC (The Fix) ---
     const isNearBottom = (el) => {
@@ -59,16 +74,22 @@ export default function ChatArea({
         onLoadMore?.();
     }, [hasMore, onLoadMore]);
 
-    const handleScroll = useCallback(() => {
-        if (scrollRef.current) {
-            shouldAutoScrollRef.current = isNearBottom(scrollRef.current);
+    const handleScroll = useCallback((e) => {
+        const el = e.target;
+        if (!el) return;
 
-            // Προαιρετικό: Αυτόματο load more αν ο χρήστης φτάσει στην κορυφή
-            if (scrollRef.current.scrollTop <= 5 && hasMore && !isPrependingRef.current) {
-                handleLoadMore();
-            }
+        // Auto-scroll logic
+        const threshold = 150;
+        const isBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+        shouldAutoScrollRef.current = isBottom;
+
+        // 🚀 LOAD MORE TRIGGER
+        // Αυξήσαμε το όριο στο 50px για να "πιάνει" πιο εύκολα
+        if (el.scrollTop <= 50 && hasMore && !isLoadingMessages && !isPrependingRef.current) {
+            console.log("📜 Reached top. Loading more...");
+            handleLoadMore();
         }
-    }, [hasMore, handleLoadMore]);
+    }, [hasMore, isLoadingMessages, handleLoadMore]);
 
     useLayoutEffect(() => {
         const el = scrollRef.current;
@@ -181,6 +202,13 @@ export default function ChatArea({
         publishTyping(STOP_TYPING);
 
         const tempId = `temp-${Date.now()}`;
+        const replySnapshot = replyTarget
+            ? {
+                replyToMessageId: replyTarget.id,
+                replyToSenderUsername: replyTarget.senderUsername,
+                replyToContent: replyTarget.content || replyTarget.attachments?.[0]?.originalName || "Attachment",
+            }
+            : {};
         const optimisticMsg = {
             id: tempId,
             clientTempId: tempId,
@@ -190,6 +218,7 @@ export default function ChatArea({
             attachments: selectedFiles.map((f, i) => ({ id: `l-${tempId}-${i}`, originalName: f.name, pending: true })),
             createdAt: new Date().toISOString(),
             status: "SENDING",
+            ...replySnapshot,
         };
 
         if (hasFiles) pendingUploadsRef.current.set(tempId, { files: selectedFiles, conversationId: chatId });
@@ -197,21 +226,67 @@ export default function ChatArea({
         setMessages(prev => [...prev, optimisticMsg]);
         setText("");
         setSelectedFiles([]);
+        setReplyTarget(null);
         shouldAutoScrollRef.current = true;
 
         onMessageSent?.({ ...optimisticMsg, content: trimmed || "Attachment" });
 
         try {
-            const res = await fetch(`/api/messages/chat/${chatId}/smsg`, {
+            const res = await instrumentedFetch(`/api/messages/chat/${chatId}/smsg`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ content: trimmed, tempId }),
+                body: JSON.stringify({ content: trimmed, tempId, replyToMessageId: replySnapshot.replyToMessageId ?? null }),
             });
             if (!res.ok) throw new Error();
         } catch {
             setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "FAILED" } : m));
         }
     };
+
+    const handleReply = useCallback((message) => {
+        if (!message?.id || String(message.id).startsWith("temp-") || String(message.id).startsWith("evt-")) return;
+        setReplyTarget(message);
+    }, []);
+
+    const focusMessage = useCallback((messageId) => {
+        const element = document.getElementById(`message-${messageId}`);
+        if (!element) return;
+
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        element.classList.add("message-highlight");
+
+        if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = setTimeout(() => {
+            element.classList.remove("message-highlight");
+        }, 2200);
+    }, []);
+
+    const handleOpenMessage = useCallback((message) => {
+        if (!message?.id) return;
+
+        setMessages((prev) => {
+            if (prev.some((item) => String(item.id) === String(message.id))) {
+                return prev;
+            }
+
+            const merged = [...prev, message];
+            merged.sort((a, b) => new Date(a.createdAt || a.sentAt) - new Date(b.createdAt || b.sentAt));
+            return merged;
+        });
+
+        setHighlightedMessageId(message.id);
+    }, [setMessages]);
+
+    useEffect(() => {
+        if (!highlightedMessageId) return;
+
+        const raf = window.requestAnimationFrame(() => focusMessage(highlightedMessageId));
+        return () => window.cancelAnimationFrame(raf);
+    }, [highlightedMessageId, messages, focusMessage]);
+
+    useEffect(() => () => {
+        if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    }, []);
 
     if (!activeChat) {
         return (
@@ -222,32 +297,67 @@ export default function ChatArea({
     }
 
     return (
-        <main className="chat-area">
-            <ChatHeader activeChat={activeChat} onToggleMute={onToggleMute} />
 
-            <MessagesPanel
-                scrollRef={scrollRef}
-                onScroll={handleScroll}
-                hasMore={hasMore}
-                isLoadingMessages={isLoadingMessages}
-                onLoadMore={handleLoadMore}
-                messages={messages}
-                currentUser={currentUser}
-                typingUser={typingUser}
-                watermarks={watermarks}
-                activeChatId={chatId}
-            />
+        <div className="chat-layout-wrapper">
+            <main className={`chat-area ${isDetailsOpen ? "sidebar-open" : ""}`}>
+                <ChatHeader
+                    activeChat={activeChat}
+                    onToggleMute={onToggleMute}
+                    onToggleDetails={() => setIsDetailsOpen((prev) => !prev)}
+                    isDetailsOpen={isDetailsOpen}
+                />
 
-            <MessageComposer
-                value={text}
-                onChange={handleInputChange}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())}
-                selectedFiles={selectedFiles}
-                onFileChange={(e) => setSelectedFiles(prev => [...prev, ...Array.from(e.target.files || [])])}
-                onRemoveFile={(idx) => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
-                onSend={handleSend}
-                disabled={!text.trim() && selectedFiles.length === 0}
+                <MessagesPanel
+                    scrollRef={scrollRef}
+                    onScroll={handleScroll}
+                    hasMore={hasMore}
+                    isLoadingMessages={isLoadingMessages}
+                    onLoadMore={handleLoadMore}
+                    messages={messages}
+                    currentUser={currentUser}
+                    currentUserId={currentUserId}
+                    token={token}
+                    typingUser={typingUser}
+                    watermarks={watermarks}
+                    activeChatId={chatId}
+                    highlightedMessageId={highlightedMessageId}
+                    onReply={handleReply}
+                    onOpenPreview={(attachments, initialIndex) => setPreviewState({ open: true, attachments, initialIndex })}
+                />
+
+                <MessageComposer
+                    value={text}
+                    onChange={handleInputChange}
+                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())}
+                    selectedFiles={selectedFiles}
+                    onFileChange={(e) => setSelectedFiles(prev => [...prev, ...Array.from(e.target.files || [])])}
+                    onRemoveFile={(idx) => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
+                    onSend={handleSend}
+                    replyTarget={replyTarget}
+                    onCancelReply={() => setReplyTarget(null)}
+                    disabled={!text.trim() && selectedFiles.length === 0}
+                />
+            </main>
+
+            {isDetailsOpen && (
+                <ConversationDetails
+                    activeChat={activeChat}
+                    messages={messages}
+                    token={token}
+                    onClose={() => setIsDetailsOpen(false)}
+                    onToggleMute={onToggleMute}
+                    onOpenMessage={handleOpenMessage}
+                    onOpenPreview={(attachments, initialIndex) => setPreviewState({ open: true, attachments, initialIndex })}
+                />
+            )}
+
+            <AttachmentPreviewModal
+                open={previewState.open}
+                attachments={previewState.attachments}
+                initialIndex={previewState.initialIndex}
+                token={token}
+                onClose={() => setPreviewState((prev) => ({ ...prev, open: false }))}
             />
-        </main>
+        </div>
     );
 }

@@ -10,6 +10,8 @@
   --border-color: #e9edef;
   --text-main: #111b21;
   --text-secondary: #667781;
+  --bg-msg-me: #d9fdd3;      /* Ανοιχτό πράσινο (Light) */
+  --bg-msg-other: #ffffff;
   --primary-blue: #00a884;
 }
 
@@ -18,6 +20,8 @@
   --bg-sidebar: #111b21;
   --bg-header: #202c33;
   --bg-chat-area: #0b141a;
+  --bg-msg-me: #005c4b;      /* Σκούρο πράσινο (Dark) */
+  --bg-msg-other: #202c33;
   --bg-main: #111b21;
   --border-color: #222d34;
   --text-main: #e9edef;

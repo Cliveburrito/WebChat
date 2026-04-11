@@ -71,6 +71,31 @@
     filter: grayscale(1);
 }
 
+.info-btn {
+    background: none;
+    border: none;
+    color: var(--text-main);
+    font-size: 1.15rem;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+}
+
+.info-btn:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.info-btn.active {
+    color: var(--primary-blue);
+    background: rgba(0, 168, 132, 0.12);
+}
+
 /* Για Dark Mode υποστήριξη αν το έχεις */
 [data-theme='dark'] .mute-btn:hover {
     background-color: rgba(255, 255, 255, 0.1);

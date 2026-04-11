@@ -8,10 +8,24 @@ export default function MessageComposer({
                                             onFileChange,
                                             onRemoveFile,
                                             onSend,
+                                            replyTarget,
+                                            onCancelReply,
                                             disabled,
                                         }) {
     return (
         <div className="composer-container">
+            {replyTarget && (
+                <div className="composer-reply">
+                    <div className="composer-reply-body">
+                        <span className="composer-reply-label">Replying to {replyTarget.senderUsername || "message"}</span>
+                        <span className="composer-reply-text">
+                            {replyTarget.content || replyTarget.attachments?.[0]?.originalName || "Attachment"}
+                        </span>
+                    </div>
+                    <button type="button" className="composer-reply-cancel" onClick={onCancelReply}>x</button>
+                </div>
+            )}
+
             {!!selectedFiles.length && (
                 <div className="composer-files">
                     {selectedFiles.map((file, idx) => (

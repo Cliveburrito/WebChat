@@ -7,6 +7,48 @@
     gap: 8px;
 }
 
+.composer-reply {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: var(--bg-main);
+    border-left: 3px solid var(--primary-blue);
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.composer-reply-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.composer-reply-label {
+    color: var(--primary-blue);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.composer-reply-text {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.composer-reply-cancel {
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 4px 6px;
+}
+
 /* Τα "Chips" των αρχείων που εμφανίζονται πάνω από το input */
 .composer-files {
     display: flex;

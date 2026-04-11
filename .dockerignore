@@ -1,0 +1,9 @@
+.git
+.idea
+frontend
+target
+uploads
+mqdata
+redisdata
+node_modules
+*.log

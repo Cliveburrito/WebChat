@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { instrumentedFetch } from "../../api/apiJson";
 import PresenceDot from "../presence/PresenceDot";
 
 export default function CreateGroupModal({
@@ -39,18 +40,18 @@ export default function CreateGroupModal({
     const handleCreateGroup = async () => {
         setError("");
         const name = groupName.trim();
-        if (!name) return setError("Δώσε ένα όνομα στο group.");
-        if (selectedIds.length < 2) return setError("Επίλεξε τουλάχιστον 2 μέλη.");
+        if (!name) return setError("Enter group name.");
+        if (selectedIds.length < 2) return setError("Choose at least 2 members.");
 
         setIsCreating(true);
         try {
-            const res = await fetch("/api/chats/group", {
+            const res = await instrumentedFetch("/api/chats/group", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ groupName: name, memberIds: selectedIds }),
             });
 
-            if (!res.ok) throw new Error("Αποτυχία δημιουργίας group.");
+            if (!res.ok) throw new Error("Failed to create group.");
             const created = await res.json();
             onGroupCreated?.(created);
             close();

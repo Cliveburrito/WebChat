@@ -9,7 +9,8 @@ const SidebarStatus = ({ chat, watermarks, currentUserId }) => {
     let maxRead = 0;
     let maxDelivered = 0;
 
-    Object.values(chatWatermarks).forEach(status => {
+    Object.entries(chatWatermarks).forEach(([userId, status]) => {
+        if (String(userId) === String(currentUserId)) return;
         if (status.lastReadId > maxRead) maxRead = status.lastReadId;
         if (status.lastDeliveredId > maxDelivered) maxDelivered = status.lastDeliveredId;
     });

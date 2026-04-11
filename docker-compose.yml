@@ -7,12 +7,12 @@ services:
     container_name: chat-db
     environment:
       POSTGRES_DB: webchat
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: dimitris
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data:Z
+      - ./podman-data/postgres:/var/lib/postgresql:Z
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -20,11 +20,12 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+      - "61613:61613"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:?RABBIT_PASSWORD must be set}
     volumes:
-      - mq_data:/var/lib/rabbitmq:Z # Χρήση Named Volume + :Z
+      - mq_data:/var/lib/rabbitmq:Z
 
   # Cache Layer (Redis)
   redis:
@@ -33,13 +34,13 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data:Z # Χρήση Named Volume + :Z
+      - redis_data:/data:Z
 
   prometheus:
     image: prom/prometheus:latest
     container_name: chat-prometheus
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:Z # ΠΡΟΣΟΧΗ: Εδώ θέλει το :Z οπωσδήποτε
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:Z
     ports:
       - "9090:9090"
 
@@ -49,42 +50,56 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
     depends_on:
       - prometheus
 
-# Ορισμός των Named Volumes στο τέλος
+  backend:
+    build:
+      context: .
+    container_name: chat-backend
+    depends_on:
+      - db
+      - rabbitmq
+      - redis
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      RABBIT_HOST: rabbitmq
+      RABBIT_USER: ${RABBIT_USER:-guest}
+      RABBIT_PASSWORD: ${RABBIT_PASSWORD:?RABBIT_PASSWORD must be set}
+      REDIS_HOST: redis
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      STORAGE_PATH: /app/uploads
+      WS_ALLOWED_ORIGIN: ${WS_ALLOWED_ORIGIN:-http://localhost:8081}
+    volumes:
+      - ./uploads:/app/uploads:Z
+    expose:
+      - "8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: chat-frontend
+    depends_on:
+      - backend
+    expose:
+      - "80"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: chat-nginx
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "${WEB_PORT:-8081}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro,Z
+
 volumes:
-  db_data:
   mq_data:
+    name: webchat_mq_data
   redis_data:
-
-
-  # BACKEND
-#  #backend:
-#    build: .
-#    container_name: chat-backend
-#    ports:
-#      - "8080:8080"
-#    environment:
-#      # connect to container db
-#      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/WebChat
-#      SPRING_DATASOURCE_USERNAME: postgres
-#      SPRING_DATASOURCE_PASSWORD: dimitris
-#      # RabbitMQ Connection
-#      SPRING_RABBITMQ_HOST: rabbitmq
-#      SPRING_RABBITMQ_PORT: 5672
-#      SPRING_RABBITMQ_USERNAME: guest
-#      SPRING_RABBITMQ_PASSWORD: guest
-#    depends_on:
-#      - db
-#      - rabbitmq
-#
-#  # React Frontend
-#  frontend:
-#    build: ./frontend
-#    container_name: chat-frontend
-#    ports:
-#      - "5173:80" # Mapping της 80 του Nginx στην 5173 που ξέρεις
-#    depends_on:
-#      - backend
+    name: webchat_redis_data

@@ -57,6 +57,25 @@
     min-width: 0;
 }
 
+.chat-item-preview .status-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.2rem;
+    font-size: 0.78rem;
+    letter-spacing: -0.12rem;
+    font-weight: 700;
+}
+
+.chat-item-preview .status-icon.sent,
+.chat-item-preview .status-icon.delivered {
+    color: #8696a0;
+}
+
+.chat-item-preview .status-icon.read {
+    color: #53bdeb;
+}
+
 .preview-text {
     font-size: 0.85rem;
     color: var(--text-secondary);

@@ -1,6 +1,6 @@
 package com.example.WebChat.Service;
 
-import com.example.WebChat.Exception.RateLimitExceededException;
+import com.example.WebChat.shared.RateLimitExceededException;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.ConsumptionProbe;

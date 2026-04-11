@@ -10,6 +10,7 @@ import { useAuth } from "./hooks/useAuth";
 import { useChatData } from "./hooks/useChatData";
 import { useChatSocket } from "./hooks/useChatSocket";
 import { useChatTopics } from "./hooks/useChatTopics";
+import { instrumentedFetch } from "./api/apiJson";
 
 import "./App.css"; // Σιγουρέψου ότι το import είναι εδώ
 
@@ -37,6 +38,7 @@ function App() {
         setMessages,
         fetchMessages,
         bumpConversation,
+        queueAck,
         openDirectChat,
         onGroupCreated,
         toggleMute,
@@ -44,17 +46,24 @@ function App() {
         onWatermarkUpdate,
         activeChatId,
         currentUserId,
+        upsertConversation,
+        upsertUser,
     } = useChatData({ token, currentUser, stompClient });
 
     // 3. Live Subscriptions
     useChatTopics({
         stompClient,
         conversations,
+        allUsers,
         activeChatId,
         currentUser,
+        currentUserId,
         setMessages,
         bumpConversation,
+        queueAck,
         markChatRead,
+        upsertConversation,
+        upsertUser,
         onWatermarkUpdate,
     });
 
@@ -67,7 +76,7 @@ function App() {
     const toggleStealthMode = useCallback(async () => {
         const newStatus = !stealthMode;
         try {
-            const response = await fetch(`/api/users/me/stealth?enabled=${newStatus}`, {
+            const response = await instrumentedFetch(`/api/users/me/stealth?enabled=${newStatus}`, {
                 method: "PATCH",
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -129,6 +138,7 @@ function App() {
                     hasMore={hasMore}
                     onLoadMore={() => fetchMessages(activeChatId, msgPage + 1)}
                     currentUser={currentUser}
+                    currentUserId={currentUserId}
                     token={token}
                     setMessages={setMessages}
                     stompClient={stompClient}

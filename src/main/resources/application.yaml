@@ -15,20 +15,27 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:5432/webchat
     username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:dimitris}
+    password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
 
   # JPA & Hibernate Settings
   jpa:
     hibernate:
-      ddl-auto: update # Automatically creates/updates tables based on Java Entities
-    show-sql: true     # Logs SQL queries to the console for debugging
+      ddl-auto: validate
+    show-sql: ${JPA_SHOW_SQL:false}
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
         use_sql_comments: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+    baseline-description: Existing WebChat schema
 
   # Message Broker (RabbitMQ)
   rabbitmq:
@@ -42,6 +49,8 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: 6379
+  cache:
+    type: simple
     web:
       pageable:
         serialization-mode: via-dto
@@ -66,15 +75,49 @@ management:
 # Custom Application Security Settings
 application:
   security:
-    # HS512 requires a 64-character (512-bit) secret key
-    jwt-secret: ${JWT_SECRET:6b7c8d9eafb0c1d2e33f8e6c4b3a2d1f9e7c5233sab4a39281726354455464758696a}
-    jwt-expiration-ms: 86400000
+    jwt-secret: ${JWT_SECRET}
+    jwt-expiration-ms: ${JWT_EXPIRATION_MS:300000}
+    refresh-expiration-ms: ${REFRESH_TOKEN_EXPIRATION_MS:2592000000}
+    refresh-cookie-secure: ${REFRESH_COOKIE_SECURE:false}
+    refresh-cookie-same-site: ${REFRESH_COOKIE_SAME_SITE:Strict}
+
+  tracking:
+    detailed-enabled: ${REQUEST_TRACKING_DETAILED_ENABLED:true}
+    slow-request-threshold-ms: ${REQUEST_TRACKING_SLOW_THRESHOLD_MS:2000}
+
+  watermarks:
+    write-behind-enabled: ${WATERMARK_WRITE_BEHIND_ENABLED:true}
+    flush-batch-size: ${WATERMARK_FLUSH_BATCH_SIZE:500}
+    flush-fixed-delay-ms: ${WATERMARK_FLUSH_FIXED_DELAY_MS:5000}
+    delivered-receipt-member-limit: ${WATERMARK_DELIVERED_RECEIPT_MEMBER_LIMIT:50}
 
   storage:
     location: ${STORAGE_PATH:uploads}
     max-file-size: 15728640 # 15MB in bytes
+    preview-max-dimension: 200
+    allowed-content-types:
+      - image/jpeg
+      - image/png
+      - image/webp
+      - application/pdf
+      - video/mp4
 
 
   websocket:
     allowed-origins:
       - ${WS_ALLOWED_ORIGIN:http://localhost:5173}
+
+  rabbitmq:
+    stomp:
+      host: ${RABBIT_HOST:localhost}
+      port: 61613
+      username: ${RABBIT_USER:guest}
+      password: ${RABBIT_PASSWORD:guest}
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%5p requestId=%X{requestId} thread=%t logger=%logger{36} msg=%m%n"
+  level:
+    com.example.WebChat.observability: DEBUG
+    # com.example.WebChat.observability: ${REQUEST_TRACKING_LOG_LEVEL:INFO}
+    com.example.WebChat.security.JwtAuthenticationFilter: ${AUTH_TRACKING_LOG_LEVEL:INFO}

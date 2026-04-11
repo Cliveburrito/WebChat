@@ -1,0 +1,120 @@
+.preview-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 12, 16, 0.86);
+    display: grid;
+    place-items: center;
+    z-index: 80;
+    padding: 24px;
+}
+
+.preview-modal {
+    position: relative;
+    width: min(1080px, 100%);
+    height: min(84vh, 860px);
+    background: rgba(12, 18, 23, 0.96);
+    border-radius: 28px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+}
+
+.preview-close,
+.preview-nav {
+    position: absolute;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.preview-close {
+    top: 18px;
+    right: 18px;
+    width: 44px;
+    height: 44px;
+    font-size: 1.8rem;
+}
+
+.preview-nav {
+    top: 50%;
+    transform: translateY(-50%);
+    width: 46px;
+    height: 46px;
+    font-size: 2rem;
+}
+
+.preview-nav.left {
+    left: 18px;
+}
+
+.preview-nav.right {
+    right: 18px;
+}
+
+.preview-nav:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.preview-stage {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    padding: 64px 72px 18px;
+    min-height: 0;
+}
+
+.preview-media {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 18px;
+}
+
+.preview-state {
+    color: rgba(255, 255, 255, 0.84);
+    font-size: 1rem;
+}
+
+.preview-state.error {
+    color: #ffb4b4;
+}
+
+.preview-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 24px 22px;
+    color: rgba(255, 255, 255, 0.88);
+    background: linear-gradient(180deg, rgba(12, 18, 23, 0) 0%, rgba(12, 18, 23, 0.86) 100%);
+}
+
+.preview-meta strong {
+    font-size: 0.98rem;
+}
+
+.preview-meta span {
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 0.84rem;
+}
+
+@media (max-width: 720px) {
+    .preview-modal-backdrop {
+        padding: 0;
+    }
+
+    .preview-modal {
+        width: 100%;
+        height: 100vh;
+        border-radius: 0;
+    }
+
+    .preview-stage {
+        padding: 72px 18px 18px;
+    }
+}

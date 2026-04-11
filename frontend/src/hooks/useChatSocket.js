@@ -12,7 +12,7 @@ export function useChatSocket({ token, username, onPresenceUpdate, debug = false
         let isCancelled = false;
         let heartbeatInterval = null;
 
-        const socketUrl = import.meta?.env?.VITE_WS_URL || "http://localhost:8080/ws";
+        const socketUrl = import.meta?.env?.VITE_WS_URL || "/ws";
 
         const client = new Client({
             webSocketFactory: () => new SockJS(socketUrl),

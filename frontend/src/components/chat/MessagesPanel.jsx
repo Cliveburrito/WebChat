@@ -11,16 +11,19 @@ export default function MessagesPanel({
                                           onLoadMore,
                                           messages,
                                           currentUser,
+                                          currentUserId,
+                                          token,
                                           typingUser,
                                           watermarks,
-                                          activeChatId
+                                          activeChatId,
+                                          onReply,
+                                          onOpenPreview
                                       }) {
     const currentChatWatermarks = watermarks?.[activeChatId] || {};
 
     // --- Logic για αυτόματο Load More στο Scroll ---
-    const handleScrollInternal = () => {
-        // Το load more ελέγχεται κεντρικά από το ChatArea για να αποφεύγουμε διπλά requests.
-        onScroll();
+    const handleScrollInternal = (e) => {
+        onScroll(e); // Pass the event up!
     };
 
     // --- Logic για Date Dividers (Today, Yesterday, κλπ) ---
@@ -58,7 +61,11 @@ export default function MessagesPanel({
                     key={m.id ?? `temp-${i}`}
                     msg={m}
                     currentUser={currentUser}
+                    currentUserId={currentUserId}
                     chatWatermarks={currentChatWatermarks}
+                    token={token}
+                    onReply={onReply}
+                    onOpenPreview={onOpenPreview}
                 />
             );
         });
@@ -69,7 +76,7 @@ export default function MessagesPanel({
         <div
             id="messages"
             ref={scrollRef}
-            onScroll={handleScrollInternal}
+            onScroll={handleScrollInternal} // This calls the above
             className="messages-container"
         >
             {/* Κουμπί για χειροκίνητο Load More (ως fallback) */}

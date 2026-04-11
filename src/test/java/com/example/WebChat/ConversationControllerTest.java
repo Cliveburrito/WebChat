@@ -1,9 +1,9 @@
 //package com.example.WebChat;
 //
 //
-//import com.example.WebChat.DTO.*;
-//import com.example.WebChat.Service.ConversationService;
-//import com.example.WebChat.Service.MessageService;
+//import com.example.WebChat.shared.dto.*;
+//import com.example.WebChat.conversation.ConversationService;
+//import com.example.WebChat.message.MessageService;
 //import com.example.WebChat.Service.RateLimiterService;
 //import com.fasterxml.jackson.databind.ObjectMapper;
 //import org.junit.jupiter.api.DisplayName;
@@ -52,7 +52,7 @@
 //    @DisplayName("POST /api/chats/direct - Should open direct chat")
 //    @WithMockUser(username = TEST_USERNAME, authorities = {"USER"})
 //    void openDirectChat_ShouldReturnConversation() throws Exception {
-//        OpenDirectChatRequest request = new OpenDirectChatRequest(1L, 2L);
+//        DirectChatRequest request = new DirectChatRequest(1L, 2L);
 //        ConversationResponse expectedResponse = new ConversationResponse(
 //                100L, "otheruser", "avatar.png", "Hello", 0, Instant.now()
 //        );
@@ -76,7 +76,7 @@
 //    @DisplayName("POST /api/chats/group - Should create group chat")
 //    @WithMockUser(username = TEST_USERNAME, authorities = {"USER"})
 //    void createGroup_ShouldReturnGroupConversation() throws Exception {
-//        OpenGroupChatRequest request = new OpenGroupChatRequest(
+//        GroupChatRequest request = new GroupChatRequest(
 //                "Test Group",
 //                List.of(2L, 3L, 4L)
 //        );
@@ -85,7 +85,7 @@
 //                200L, "Test Group", "group-avatar.png", "Welcome!", 0, Instant.now()
 //        );
 //
-//        when(conversationService.createGroupChatPreview(any(OpenGroupChatRequest.class), eq(TEST_USER_ID)))
+//        when(conversationService.createGroupChatPreview(any(GroupChatRequest.class), eq(TEST_USER_ID)))
 //                .thenReturn(expectedResponse);
 //
 //        mockMvc.perform(post("/api/chats/group")
@@ -95,7 +95,7 @@
 //                .andExpect(jsonPath("$.id").value(200L))
 //                .andExpect(jsonPath("$.name").value("Test Group"));
 //
-//        verify(conversationService).createGroupChatPreview(any(OpenGroupChatRequest.class), eq(TEST_USER_ID));
+//        verify(conversationService).createGroupChatPreview(any(GroupChatRequest.class), eq(TEST_USER_ID));
 //    }
 //
 //    // ==================== GET CHATS TESTS ====================
